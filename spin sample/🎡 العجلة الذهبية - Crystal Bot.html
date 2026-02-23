@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<!-- saved from url=(0014)about:internet -->
+<html lang="ar" style="--tg-viewport-height: 100vh; --tg-viewport-stable-height: 100vh;"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<title>🎡 العجلة الذهبية - Crystal Bot</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+
+<script src="./🎡 العجلة الذهبية - Crystal Bot_files/telegram-web-app.js.download"></script>
+<script src="./🎡 العجلة الذهبية - Crystal Bot_files/gsap.min.js.download"></script>
+<script src="./🎡 العجلة الذهبية - Crystal Bot_files/Winwheel.js.download"></script>
+
+<style>
+body { 
+    font-family: 'Tajawal', 'Segoe UI', Arial, sans-serif; 
+    text-align: center; 
+    background: radial-gradient(circle at top, #0a0a0a 0%, #000000 100%);
+    color: #fff; 
+    margin: 0; 
+    padding: 15px;
+    overflow-x: hidden;
+}
+
+/* خلفية ذهبية خافتة متحركة */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0; left: 0;
+    width: 200%; height: 200%;
+    background: conic-gradient(from 0deg, rgba(255,215,0,0.08), rgba(255,255,0,0.05), transparent 60%);
+    animation: rotateGlow 40s linear infinite;
+    z-index: -1;
+}
+@keyframes rotateGlow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* الشعار */
+#logo {
+    width: 100px;
+    margin-top: 10px;
+    filter: drop-shadow(0 0 15px #ffd700);
+    animation: logoPulse 2s infinite alternate ease-in-out;
+}
+@keyframes logoPulse {
+    from { filter: drop-shadow(0 0 10px #ffcc00); }
+    to { filter: drop-shadow(0 0 25px #fff000); }
+}
+
+/* النص */
+#message { 
+    margin-top: 20px; 
+    font-size: 1.4em; 
+    color: #ffdf00; 
+    text-shadow: 0 0 12px #ffdf00, 0 0 25px #b38f00; 
+}
+
+/* الغلاف الذهبي للعجلة */
+#wheelWrapper {
+    position: relative;
+    display: inline-block;
+    margin-top: 25px;
+    padding: 20px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #ffec8b, #b38f00 80%, #6a4e00 100%);
+    box-shadow: 
+        0 0 30px rgba(255,215,0,0.6),
+        inset 0 0 25px rgba(255,255,255,0.3),
+        inset 0 0 50px rgba(0,0,0,0.4);
+    z-index: 2;
+}
+
+/* تأثير الضوء حول الإطار */
+#wheelWrapper::after {
+    content: "";
+    position: absolute;
+    top: -12px; left: -12px;
+    width: calc(100% + 24px);
+    height: calc(100% + 24px);
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, rgba(255,215,0,0.4), rgba(255,255,255,0.1), transparent 70%);
+    filter: blur(12px);
+    animation: haloRotate 8s linear infinite;
+    z-index: -1;
+}
+@keyframes haloRotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* العجلة */
+#wheelCanvas { 
+    width: min(85vw, 450px);
+    height: min(85vw, 450px);
+    border-radius: 50%; 
+    background: radial-gradient(circle at center, #111 0%, #000 100%);
+    box-shadow: inset 0 0 60px rgba(255,215,0,0.1);
+}
+
+/* المؤشر */
+#pointer { 
+    width: 0; 
+    height: 0; 
+    border-left: 20px solid transparent; 
+    border-right: 20px solid transparent; 
+    border-top: 40px solid #ffd700; 
+    position: absolute; 
+    top: -10px; 
+    left: 50%; 
+    transform: translateX(-50%); 
+    z-index: 10; 
+    filter: drop-shadow(0 0 10px #ffea00);
+    animation: pointerPulse 1.2s infinite alternate;
+}
+@keyframes pointerPulse {
+    from { transform: translateX(-50%) scale(1); }
+    to { transform: translateX(-50%) scale(1.1); }
+}
+
+/* زر تدوير العجلة */
+#spinButton { 
+    margin-top: 25px; 
+    padding: 14px 35px; 
+    font-size: 1.5em; 
+    cursor: pointer; 
+    background: linear-gradient(135deg, #fff000, #ffcc00); 
+    color: #000; 
+    border: none; 
+    border-radius: 50px; 
+    box-shadow: 0 5px #b38f00, 0 0 25px rgba(255,215,0,0.8); 
+    transition: all 0.2s ease-in-out; 
+    font-weight: bold;
+}
+#spinButton:hover { 
+    transform: scale(1.08);
+    box-shadow: 0 7px #b38f00, 0 0 35px rgba(255,255,0,0.9);
+}
+#spinButton:active { 
+    transform: scale(0.96);
+}
+
+/* زر تأكيد الجائزة */
+#confirmBtn {
+    margin-top: 25px;
+    padding: 13px 28px;
+    font-size: 1.3em;
+    background: linear-gradient(135deg, #2ecc71, #27ae60);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 4px #1f8f50;
+    transition: all 0.2s ease-in-out;
+}
+#confirmBtn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px #1f8f50, 0 0 20px rgba(46,204,113,0.8);
+}
+</style>
+</head>
+
+<body>
+<img id="logo" src="./🎡 العجلة الذهبية - Crystal Bot_files/logo.png" alt="لوغو Crystal Bot">
+
+<div id="message">✨ اضغط على الزر لتدوير العجلة الذهبية ✨</div>
+
+<div id="wheelWrapper">
+    <div id="pointer"></div>
+    <canvas id="wheelCanvas" width="450" height="450"></canvas>
+</div>
+
+<button id="spinButton" onclick="startSpin()">🎯 دَوِّر العجلة!</button>
+
+<script>
+let theWheel = null;
+let wheelSpinning = false;
+let finalPrizes = [];
+let winningIndex = 0;
+let stopAngle = 0;
+
+// تحميل الجوائز
+async function init() {
+    Telegram.WebApp.ready();
+    Telegram.WebApp.expand();
+    Telegram.WebApp.disableClosingConfirmation();
+
+    try {
+        const response = await fetch('prizes.json');
+        if (!response.ok) throw new Error("فشل تحميل الجوائز");
+        finalPrizes = await response.json();
+    } catch {
+        finalPrizes = [
+            { name: "🎁 حظ أوفر", weight: 80 },
+            { name: "💰 5000", weight: 5 },
+            { name: "💎 10000", weight: 10 },
+            { name: "👑 25000", weight: 5 }
+        ];
+    }
+    initializeWheel();
+}
+
+// إنشاء العجلة
+function initializeWheel() {
+    const totalSegments = finalPrizes.length;
+    const segments = [];
+
+    for (let i = 0; i < totalSegments; i++) {
+        const isGold = i % 2 === 0;
+        segments.push({
+            text: finalPrizes[i].name,
+            fillStyle: isGold ? '#ffd700' : '#111',
+            strokeStyle: '#ffea00',
+            lineWidth: 5,
+            textFontSize: 26,
+            textFillStyle: isGold ? '#000' : '#ffd700'
+        });
+    }
+
+    theWheel = new Winwheel({
+        canvasId: 'wheelCanvas',
+        numSegments: totalSegments,
+        segments: segments,
+        outerRadius: 220,
+        rotationAngle: 0,
+        lineWidth: 6,
+        strokeStyle: '#ffd700'
+    });
+
+    theWheel.draw();
+}
+
+// اختيار الجائزة
+function getRandomPrizeIndexByWeight() {
+    const total = finalPrizes.reduce((sum, p) => sum + p.weight, 0);
+    let r = Math.random() * total;
+    for (let i = 0; i < finalPrizes.length; i++) {
+        if (r < finalPrizes[i].weight) return i;
+        r -= finalPrizes[i].weight;
+    }
+    return 0;
+}
+
+// دوران العجلة
+function startSpin() {
+    if (!theWheel || wheelSpinning) return;
+    wheelSpinning = true;
+
+    const spinBtn = document.getElementById('spinButton');
+    spinBtn.style.display = 'none';
+    document.getElementById('message').innerText = '🎡 العجلة تدور... حظاً موفقاً!';
+
+    winningIndex = getRandomPrizeIndexByWeight();
+    const segmentCount = finalPrizes.length;
+    const segmentAngle = 360 / segmentCount;
+    stopAngle = 360 - (winningIndex * segmentAngle + segmentAngle / 2);
+    const totalRotation = stopAngle + 360 * 7;
+
+    gsap.to(theWheel, {
+        rotationAngle: totalRotation,
+        duration: 8,
+        ease: "power4.out",
+        onUpdate: () => theWheel.draw(),
+        onComplete: () => showPrize()
+    });
+}
+
+// عرض النتيجة
+function showPrize() {
+    wheelSpinning = false;
+    theWheel.rotationAngle = stopAngle;
+    theWheel.draw();
+
+    const prizeText = finalPrizes[winningIndex].name;
+    document.getElementById('message').innerHTML = `🎉 مبروك! لقد ربحت: <b>${prizeText}</b>`;
+
+    // إرسال النتيجة مباشرة إلى البوت دون زر
+    try {
+        const value = parseInt(prizeText) || 0; // إذا كان الجائزة رقمية
+        Telegram.WebApp.sendData(JSON.stringify({ result: value }));
+        console.log("تم إرسال النتيجة:", value);
+    } catch (err) {
+        console.error("فشل إرسال النتيجة:", err);
+    }
+}
+
+
+
+window.onload = init;
+</script>
+
+
+</body></html>

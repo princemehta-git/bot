@@ -3,8 +3,10 @@ const express = require('express');
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 const { initDb, createBotDb, getAllBots, getActiveBots, getBotRowById, createBotRow, updateBotRow, deleteBotRow } = require('./lib/db');
+const { verifyInitData, parseAmountFromText } = require('./lib/telegram-initdata');
 const createBotInstance = require('./lib/bot-instance');
 const { createApiClient } = require('./lib/ichancy-api');
 
@@ -47,6 +49,7 @@ async function startBot(botRow) {
     options.webhookDomain = WEBHOOK_DOMAIN;
     options.webhookPath = `/webhook/${encodeURIComponent(botRow.bot_id)}`;
   }
+  options.spinBaseUrl = (process.env.SPIN_BASE_URL || (WEBHOOK_DOMAIN ? `https://${WEBHOOK_DOMAIN}` : `http://localhost:${WEB_PORT}`)).replace(/\/$/, '');
   try {
     const ok = await instance.start(options);
     if (ok) {
@@ -126,6 +129,7 @@ const BOT_FIELDS = [
   { key: 'bot_token', label: 'Bot Token', type: 'text', required: true },
   { key: 'bot_username', label: 'Bot Username', type: 'text' },
   { key: 'bot_display_name', label: 'Display Name', type: 'text' },
+  { key: 'username_prefix', label: 'Username Prefix (for new Ichancy accounts, e.g. Bot-)', type: 'text' },
   { key: 'channel_username', label: 'Channel Username (e.g. @channel)', type: 'text' },
   { key: 'admin_username', label: 'Admin Username(s) (comma-separated)', type: 'text' },
   { key: 'support_username', label: 'Support Username', type: 'text' },
@@ -168,8 +172,105 @@ function renderBotForm(bot, isEdit) {
     app.use(express.urlencoded({ extended: true }));
     app.use(cookieParser);
 
+    // ── Static: logo, public (Winwheel, gsap) ──
+    const logoDir = path.join(__dirname, 'logo');
+    if (fs.existsSync(logoDir)) app.use('/logo', express.static(logoDir));
+    const publicDir = path.join(__dirname, 'public');
+    if (fs.existsSync(publicDir)) app.use('/static', express.static(publicDir));
+
     // ── Health ──
     app.get('/health', (_req, res) => res.send('ok'));
+
+    // ── Spin API ──
+    app.get('/api/spin/config', async (req, res) => {
+      const botId = (req.query.bot_id || '').trim();
+      const initData = (req.headers['x-telegram-init-data'] || req.query.init_data || '').trim();
+      if (!botId || !initData) {
+        return res.status(400).json({ error: 'bot_id and init_data required' });
+      }
+      const bot = await getBotRowById(botId);
+      if (!bot || !bot.bot_token) {
+        return res.status(404).json({ error: 'Bot not found' });
+      }
+      const result = verifyInitData(initData, bot.bot_token);
+      if (!result.valid) {
+        return res.status(401).json({ error: 'Invalid initData' });
+      }
+      const userId = result.payload?.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'User not in initData' });
+      }
+      const db = createBotDb(botId);
+      const user = await db.getUserByTelegramId(userId);
+      if (!user) {
+        return res.status(403).json({ error: 'User not found' });
+      }
+      await db.ensureDailySpinEligibility(userId);
+      const userAfter = await db.getUserByTelegramId(userId);
+      const spinsAvailable = Math.min(1, Number(userAfter?.wheel_spins_available_today ?? 0));
+      if (spinsAvailable <= 0) {
+        return res.status(403).json({ error: 'No spins available' });
+      }
+      const prizes = Array.isArray(bot.spin_prizes) && bot.spin_prizes.length > 0
+        ? bot.spin_prizes
+        : [{ text: 'حظ أوفر', weight: 80 }, { text: '💰 5000', weight: 5 }, { text: '💎 10000', weight: 10 }, { text: '👑 25000', weight: 5 }];
+      const baseUrl = WEBHOOK_DOMAIN ? `https://${WEBHOOK_DOMAIN}` : `http://localhost:${WEB_PORT}`;
+      res.json({
+        prizes,
+        user_id: userId,
+        bot_id: botId,
+        logo_url: `${baseUrl}/logo/${encodeURIComponent(botId)}.png`,
+        spins_available: spinsAvailable,
+      });
+    });
+
+    app.post('/api/spin/result', async (req, res) => {
+      const { init_data, bot_id, prize_index, text } = req.body || {};
+      const initData = (init_data || '').trim();
+      const botId = (bot_id || '').trim();
+      const idx = parseInt(prize_index, 10);
+      if (!initData || !botId || !Number.isFinite(idx) || typeof text !== 'string') {
+        return res.status(400).json({ error: 'Invalid request' });
+      }
+      const bot = await getBotRowById(botId);
+      if (!bot || !bot.bot_token) {
+        return res.status(404).json({ error: 'Bot not found' });
+      }
+      const result = verifyInitData(initData, bot.bot_token);
+      if (!result.valid) {
+        return res.status(401).json({ error: 'Invalid initData' });
+      }
+      const userId = result.payload?.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'User not in initData' });
+      }
+      const prizes = Array.isArray(bot.spin_prizes) && bot.spin_prizes.length > 0
+        ? bot.spin_prizes
+        : [{ text: 'حظ أوفر', weight: 80 }, { text: '💰 5000', weight: 5 }, { text: '💎 10000', weight: 10 }, { text: '👑 25000', weight: 5 }];
+      const prize = prizes[idx];
+      if (!prize || prize.text !== text) {
+        return res.status(400).json({ error: 'Prize mismatch' });
+      }
+      const amount = parseAmountFromText(text);
+      const db = createBotDb(botId);
+      const user = await db.getUserByTelegramId(userId);
+      if (!user) {
+        return res.status(403).json({ error: 'User not found' });
+      }
+      const spinsAvailable = Number(user.wheel_spins_available_today ?? 0);
+      if (spinsAvailable <= 0) {
+        return res.status(403).json({ error: 'No spins available' });
+      }
+      try {
+        const applied = await db.useSpinCredit(userId, amount);
+        if (!applied) {
+          return res.status(403).json({ error: 'No spins available or already used' });
+        }
+        res.json({ ok: true, amount });
+      } catch (err) {
+        res.status(500).json({ error: 'Failed to credit' });
+      }
+    });
 
     // ── Centralized webhook routing (one route, delegates to running bot) ──
     app.post('/webhook/:botId', (req, res) => {
@@ -258,7 +359,7 @@ function renderBotForm(bot, isEdit) {
 
     // ── New bot ──
     app.get('/admin/bots/new', authMiddleware, (_req, res) => {
-      const defaults = { is_active: true, debug_logs: true, bot_display_name: 'New Bot' };
+      const defaults = { is_active: true, debug_logs: true, bot_display_name: 'New Bot', username_prefix: 'Bot-' };
       res.send(layout('Add Bot', `<div class="container">
         <h1>Add New Bot</h1>
         <div class="card" style="margin-top:16px">
@@ -305,6 +406,8 @@ function renderBotForm(bot, isEdit) {
       const bot = await getBotRowById(req.params.id);
       if (!bot) return res.status(404).send(layout('Not Found', '<div class="container"><h1>Bot not found</h1><a href="/admin">Back</a></div>'));
       const isRunning = runningBots.has(bot.bot_id);
+      const spinPrizesVal = Array.isArray(bot.spin_prizes) ? JSON.stringify(bot.spin_prizes, null, 2) : '[{"text":"حظ أوفر","weight":80},{"text":"💰 5000","weight":5}]';
+      const luckBoxPrizesVal = Array.isArray(bot.luck_box_prizes) ? JSON.stringify(bot.luck_box_prizes, null, 2) : '[{"amount":0,"weight":0},{"amount":0,"weight":0},{"amount":0,"weight":0}]';
       res.send(layout('Edit Bot', `<div class="container">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <h1>Edit: ${esc(bot.bot_display_name || bot.bot_id)}</h1>
@@ -313,6 +416,10 @@ function renderBotForm(bot, isEdit) {
         <div class="card" style="margin-top:16px">
           <form method="POST" action="/admin/bots/${encodeURIComponent(bot.bot_id)}">
             ${renderBotForm(bot, true)}
+            <label>Spin Prizes (JSON) — text and weight only</label>
+            <textarea name="spin_prizes" rows="8" placeholder='[{"text":"حظ أوفر","weight":80},{"text":"💰 5000","weight":5}]'>${esc(spinPrizesVal)}</textarea>
+            <label>Luck Box Prizes (JSON) — 3 boxes: amount (LS) and weight (%). Default all 0</label>
+            <textarea name="luck_box_prizes" rows="6" placeholder='[{"amount":0,"weight":0},{"amount":0,"weight":0},{"amount":0,"weight":0}]'>${esc(luckBoxPrizesVal)}</textarea>
             <div style="display:flex;gap:8px;margin-top:16px">
               <button type="submit" class="btn btn-primary">Save Changes</button>
               <a href="/admin" class="btn btn-danger">Cancel</a>
@@ -336,7 +443,55 @@ function renderBotForm(bot, isEdit) {
           if (f.type === 'checkbox') fields[f.key] = req.body[f.key] === '1';
           else if (req.body[f.key] !== undefined) fields[f.key] = req.body[f.key];
         }
+        if (req.body.spin_prizes !== undefined) {
+          const raw = req.body.spin_prizes.trim();
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (!Array.isArray(parsed)) throw new Error('Must be array');
+              const normalized = parsed.map((p) => {
+                const w = Number(p.weight);
+                if (typeof p.text !== 'string' || !Number.isFinite(w) || w <= 0) {
+                  throw new Error('Each prize must have text (string) and weight (positive number)');
+                }
+                return { text: p.text, weight: w };
+              });
+              fields.spin_prizes = normalized;
+            } catch (e) {
+              throw new Error('Invalid spin prizes JSON: ' + (e.message || 'parse error'));
+            }
+          } else {
+            fields.spin_prizes = null;
+          }
+        }
+        if (req.body.luck_box_prizes !== undefined) {
+          const raw = req.body.luck_box_prizes.trim();
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (!Array.isArray(parsed)) throw new Error('Must be array');
+              const normalized = parsed.slice(0, 3).map((p) => {
+                const amount = Number(p.amount);
+                const weight = Number(p.weight);
+                if (!Number.isFinite(amount) || amount < 0 || !Number.isFinite(weight) || weight < 0) {
+                  throw new Error('Each box must have amount and weight (non-negative numbers)');
+                }
+                return { amount: Math.round(amount * 100) / 100, weight: Math.round(weight) };
+              });
+              while (normalized.length < 3) normalized.push({ amount: 0, weight: 0 });
+              fields.luck_box_prizes = normalized;
+            } catch (e) {
+              throw new Error('Invalid luck box prizes JSON: ' + (e.message || 'parse error'));
+            }
+          } else {
+            fields.luck_box_prizes = null;
+          }
+        }
         await updateBotRow(req.params.id, fields);
+        const instance = runningBots.get(req.params.id);
+        if (instance && typeof instance.reloadConfig === 'function') {
+          await instance.reloadConfig();
+        }
         res.setHeader('Set-Cookie', flashCookie(`Bot "${req.params.id}" updated`));
         res.redirect('/admin');
       } catch (err) {
@@ -366,8 +521,15 @@ function renderBotForm(bot, isEdit) {
       res.redirect('/admin');
     });
 
-    // ── Redirect root to admin ──
-    app.get('/', (_req, res) => res.redirect('/admin'));
+    // ── Root: serve spin Mini App ──
+    app.get('/', (req, res) => {
+      const spinPath = path.join(__dirname, 'spin.html');
+      if (fs.existsSync(spinPath)) {
+        res.sendFile(spinPath);
+      } else {
+        res.redirect('/admin');
+      }
+    });
 
     // ── Start HTTP(S) server ──
     const sslCert = (process.env.WEBHOOK_SSL_CERT_PATH || '').trim();

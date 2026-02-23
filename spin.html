@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ar" style="--tg-viewport-height: 100vh; --tg-viewport-stable-height: 100vh;">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+  <title>🎡 العجلة الذهبية</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="/static/gsap.min.js"></script>
+  <script src="/static/Winwheel.js"></script>
+  <style>
+    body { font-family: 'Tajawal', 'Segoe UI', Arial, sans-serif; text-align: center; background: radial-gradient(circle at top, #0a0a0a 0%, #000000 100%); color: #fff; margin: 0; padding: 15px; overflow-x: hidden; }
+    body::before { content: ""; position: fixed; top: 0; left: 0; width: 200%; height: 200%; background: conic-gradient(from 0deg, rgba(255,215,0,0.08), rgba(255,255,0,0.05), transparent 60%); animation: rotateGlow 40s linear infinite; z-index: -1; }
+    @keyframes rotateGlow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    #logo { width: 100px; margin-top: 10px; filter: drop-shadow(0 0 15px #ffd700); animation: logoPulse 2s infinite alternate ease-in-out; }
+    @keyframes logoPulse { from { filter: drop-shadow(0 0 10px #ffcc00); } to { filter: drop-shadow(0 0 25px #fff000); } }
+    #message { margin-top: 20px; font-size: 1.4em; color: #ffdf00; text-shadow: 0 0 12px #ffdf00, 0 0 25px #b38f00; }
+    #wheelWrapper { position: relative; display: inline-block; margin-top: 25px; padding: 20px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, #ffec8b, #b38f00 80%, #6a4e00 100%); box-shadow: 0 0 30px rgba(255,215,0,0.6), inset 0 0 25px rgba(255,255,255,0.3), inset 0 0 50px rgba(0,0,0,0.4); z-index: 2; }
+    #wheelWrapper::after { content: ""; position: absolute; top: -12px; left: -12px; width: calc(100% + 24px); height: calc(100% + 24px); border-radius: 50%; background: conic-gradient(from 0deg, rgba(255,215,0,0.4), rgba(255,255,255,0.1), transparent 70%); filter: blur(12px); animation: haloRotate 8s linear infinite; z-index: -1; }
+    @keyframes haloRotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    #wheelCanvas { width: min(85vw, 450px); height: min(85vw, 450px); border-radius: 50%; background: radial-gradient(circle at center, #111 0%, #000 100%); box-shadow: inset 0 0 60px rgba(255,215,0,0.1); }
+    #pointer { width: 0; height: 0; border-left: 20px solid transparent; border-right: 20px solid transparent; border-top: 40px solid #ffd700; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); z-index: 10; filter: drop-shadow(0 0 10px #ffea00); animation: pointerPulse 1.2s infinite alternate; }
+    @keyframes pointerPulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.1); } }
+    #spinButton { margin-top: 25px; padding: 14px 35px; font-size: 1.5em; cursor: pointer; background: linear-gradient(135deg, #fff000, #ffcc00); color: #000; border: none; border-radius: 50px; box-shadow: 0 5px #b38f00, 0 0 25px rgba(255,215,0,0.8); transition: all 0.2s ease-in-out; font-weight: bold; }
+    #spinButton:hover { transform: scale(1.08); box-shadow: 0 7px #b38f00, 0 0 35px rgba(255,255,0,0.9); }
+    #spinButton:active { transform: scale(0.96); }
+    #spinButton:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <img id="logo" src="" alt="Logo" style="display:none">
+  <div id="message">⏳ جاري التحميل...</div>
+  <div id="wheelWrapper" style="display:none">
+    <div id="pointer"></div>
+    <canvas id="wheelCanvas" width="450" height="450"></canvas>
+  </div>
+  <button id="spinButton" onclick="startSpin()" style="display:none">🎯 دَوِّر العجلة!</button>
+
+  <script>
+    let theWheel = null;
+    let wheelSpinning = false;
+    let finalPrizes = [];
+    let winningIndex = 0;
+    let stopAngle = 0;
+
+    function getBotId() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('bot_id') || '';
+    }
+
+    async function init() {
+      if (typeof Telegram === 'undefined' || !Telegram.WebApp) {
+        document.getElementById('message').innerText = '❌ يرجى فتح التطبيق من داخل Telegram';
+        return;
+      }
+      Telegram.WebApp.ready();
+      Telegram.WebApp.expand();
+      Telegram.WebApp.disableClosingConfirmation();
+
+      const botId = getBotId();
+      const initData = Telegram.WebApp.initData || '';
+      if (!botId || !initData) {
+        document.getElementById('message').innerText = '❌ رابط غير صالح. افتح من البوت.';
+        return;
+      }
+
+      try {
+        const url = '/api/spin/config?bot_id=' + encodeURIComponent(botId);
+        const res = await fetch(url, {
+          headers: { 'X-Telegram-Init-Data': initData }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = data.error || 'فشل تحميل الإعدادات';
+          document.getElementById('message').innerText = '❌ ' + msg;
+          return;
+        }
+        finalPrizes = data.prizes || [];
+        if (finalPrizes.length === 0) {
+          document.getElementById('message').innerText = '❌ لا توجد جوائز مُعدّة';
+          return;
+        }
+        if ((data.spins_available || 0) <= 0) {
+          document.getElementById('message').innerText = '❌ لا توجد لفات متاحة اليوم';
+          return;
+        }
+
+        const logoEl = document.getElementById('logo');
+        if (data.logo_url) {
+          logoEl.src = data.logo_url;
+          logoEl.style.display = 'inline';
+          logoEl.onerror = () => { logoEl.style.display = 'none'; };
+        }
+
+        document.getElementById('message').innerText = '✨ اضغط على الزر لتدوير العجلة الذهبية ✨';
+        document.getElementById('wheelWrapper').style.display = 'inline-block';
+        const spinBtn = document.getElementById('spinButton');
+        spinBtn.style.display = 'inline-block';
+        spinBtn.disabled = false;
+
+        initializeWheel();
+      } catch (err) {
+        document.getElementById('message').innerText = '❌ خطأ في التحميل';
+        console.error(err);
+      }
+    }
+
+    function initializeWheel() {
+      const totalSegments = finalPrizes.length;
+      const segments = [];
+      for (let i = 0; i < totalSegments; i++) {
+        const isGold = i % 2 === 0;
+        segments.push({
+          text: finalPrizes[i].text,
+          fillStyle: isGold ? '#ffd700' : '#111',
+          strokeStyle: '#ffea00',
+          lineWidth: 5,
+          textFontSize: 26,
+          textFillStyle: isGold ? '#000' : '#ffd700'
+        });
+      }
+      theWheel = new Winwheel({
+        canvasId: 'wheelCanvas',
+        numSegments: totalSegments,
+        segments: segments,
+        outerRadius: 220,
+        rotationAngle: 0,
+        lineWidth: 6,
+        strokeStyle: '#ffd700'
+      });
+      theWheel.draw();
+    }
+
+    function getRandomPrizeIndexByWeight() {
+      const total = finalPrizes.reduce((sum, p) => sum + (Number(p.weight) || 0), 0);
+      let r = Math.random() * total;
+      for (let i = 0; i < finalPrizes.length; i++) {
+        const w = Number(finalPrizes[i].weight) || 0;
+        if (r < w) return i;
+        r -= w;
+      }
+      return 0;
+    }
+
+    function startSpin() {
+      if (!theWheel || wheelSpinning) return;
+      wheelSpinning = true;
+      const spinBtn = document.getElementById('spinButton');
+      spinBtn.style.display = 'none';
+      document.getElementById('message').innerText = '🎡 العجلة تدور... حظاً موفقاً!';
+
+      winningIndex = getRandomPrizeIndexByWeight();
+      const segmentCount = finalPrizes.length;
+      const segmentAngle = 360 / segmentCount;
+      stopAngle = 360 - (winningIndex * segmentAngle + segmentAngle / 2);
+      const totalRotation = stopAngle + 360 * 7;
+
+      gsap.to(theWheel, {
+        rotationAngle: totalRotation,
+        duration: 8,
+        ease: 'power4.out',
+        onUpdate: () => theWheel.draw(),
+        onComplete: () => showPrize()
+      });
+    }
+
+    function showPrize() {
+      wheelSpinning = false;
+      theWheel.rotationAngle = stopAngle;
+      theWheel.draw();
+
+      const prizeText = finalPrizes[winningIndex].text;
+      const safe = String(prizeText).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      document.getElementById('message').innerHTML = '🎉 مبروك! لقد ربحت: <b>' + safe + '</b>';
+
+      try {
+        Telegram.WebApp.sendData(JSON.stringify({ prize_index: winningIndex, text: prizeText }));
+      } catch (err) {
+        console.error('sendData failed:', err);
+      }
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
