@@ -49,7 +49,10 @@ async function startBot(botRow) {
     options.webhookDomain = WEBHOOK_DOMAIN;
     options.webhookPath = `/webhook/${encodeURIComponent(botRow.bot_id)}`;
   }
-  options.spinBaseUrl = (process.env.SPIN_BASE_URL || (WEBHOOK_DOMAIN ? `https://${WEBHOOK_DOMAIN}` : `http://localhost:${WEB_PORT}`)).replace(/\/$/, '');
+  // Spin Mini App requires HTTPS. Use SPIN_SITE_URL (e.g. ngrok or deployed URL) when running on localhost.
+  const spinSiteUrl = (process.env.SPIN_SITE_URL || '').trim().replace(/\/$/, '');
+  const spinBaseFallback = process.env.SPIN_BASE_URL || (WEBHOOK_DOMAIN ? `https://${WEBHOOK_DOMAIN}` : `http://localhost:${WEB_PORT}`);
+  options.spinBaseUrl = (spinSiteUrl || spinBaseFallback).replace(/\/$/, '');
   try {
     const ok = await instance.start(options);
     if (ok) {
