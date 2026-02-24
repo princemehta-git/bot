@@ -191,44 +191,44 @@ function renderBotForm(bot, isEdit) {
       const initData = (req.headers['x-telegram-init-data'] || req.query.init_data || '').trim();
       const spinToken = (req.query.spin_token || '').trim();
       if (!botId) {
-        return res.status(400).json({ error: 'bot_id required' });
+        return res.status(400).json({ error: 'معرّف البوت مطلوب' });
       }
       const bot = await getBotRowById(botId);
       if (!bot || !bot.bot_token) {
-        return res.status(404).json({ error: 'Bot not found' });
+        return res.status(404).json({ error: 'البوت غير موجود' });
       }
       let userId;
       if (spinToken) {
         const parsed = verifySpinToken(spinToken, bot.bot_token);
         if (!parsed) {
-          return res.status(401).json({ error: 'Invalid or expired spin link. Open from the bot again.' });
+          return res.status(401).json({ error: 'رابط العجلة غير صالح أو منتهي. افتح من البوت مرة أخرى.' });
         }
         if (parsed.botId !== botId) {
-          return res.status(401).json({ error: 'Token bot mismatch' });
+          return res.status(401).json({ error: 'عدم تطابق الرابط مع البوت' });
         }
         userId = parsed.userId;
       } else if (initData) {
         const result = verifyInitData(initData, bot.bot_token);
         if (!result.valid) {
-          return res.status(401).json({ error: 'Invalid initData' });
+          return res.status(401).json({ error: 'بيانات التحقق غير صالحة' });
         }
         userId = result.payload?.user?.id;
         if (!userId) {
-          return res.status(401).json({ error: 'User not in initData' });
+          return res.status(401).json({ error: 'المستخدم غير موجود في بيانات التحقق' });
         }
       } else {
-        return res.status(400).json({ error: 'init_data or spin_token required' });
+        return res.status(400).json({ error: 'مطلوب رابط من البوت أو بيانات التحقق' });
       }
       const db = createBotDb(botId);
       const user = await db.getUserByTelegramId(userId);
       if (!user) {
-        return res.status(403).json({ error: 'User not found' });
+        return res.status(403).json({ error: 'المستخدم غير موجود' });
       }
       await db.ensureDailySpinEligibility(userId);
       const userAfter = await db.getUserByTelegramId(userId);
       const spinsAvailable = Math.min(1, Number(userAfter?.wheel_spins_available_today ?? 0));
       if (spinsAvailable <= 0) {
-        return res.status(403).json({ error: 'No spins available' });
+        return res.status(403).json({ error: 'لا توجد لفات متاحة' });
       }
       const prizes = Array.isArray(bot.spin_prizes) && bot.spin_prizes.length > 0
         ? bot.spin_prizes
@@ -250,27 +250,27 @@ function renderBotForm(bot, isEdit) {
       const botId = (bot_id || '').trim();
       const idx = parseInt(prize_index, 10);
       if ((!initData && !spinToken) || !botId || !Number.isFinite(idx) || typeof text !== 'string') {
-        return res.status(400).json({ error: 'Invalid request' });
+        return res.status(400).json({ error: 'طلب غير صالح' });
       }
       const bot = await getBotRowById(botId);
       if (!bot || !bot.bot_token) {
-        return res.status(404).json({ error: 'Bot not found' });
+        return res.status(404).json({ error: 'البوت غير موجود' });
       }
       let userId;
       if (spinToken) {
         const parsed = verifySpinToken(spinToken, bot.bot_token);
         if (!parsed || parsed.botId !== botId) {
-          return res.status(401).json({ error: 'Invalid or expired spin link' });
+          return res.status(401).json({ error: 'رابط العجلة غير صالح أو منتهي' });
         }
         userId = parsed.userId;
       } else {
         const result = verifyInitData(initData, bot.bot_token);
         if (!result.valid) {
-          return res.status(401).json({ error: 'Invalid initData' });
+          return res.status(401).json({ error: 'بيانات التحقق غير صالحة' });
         }
         userId = result.payload?.user?.id;
         if (!userId) {
-          return res.status(401).json({ error: 'User not in initData' });
+          return res.status(401).json({ error: 'المستخدم غير موجود في بيانات التحقق' });
         }
       }
       const prizes = Array.isArray(bot.spin_prizes) && bot.spin_prizes.length > 0
@@ -278,26 +278,26 @@ function renderBotForm(bot, isEdit) {
         : [{ text: 'حظ أوفر', weight: 80 }, { text: '💰 5000', weight: 5 }, { text: '💎 10000', weight: 10 }, { text: '👑 25000', weight: 5 }];
       const prize = prizes[idx];
       if (!prize || prize.text !== text) {
-        return res.status(400).json({ error: 'Prize mismatch' });
+        return res.status(400).json({ error: 'الجائزة غير متطابقة' });
       }
       const amount = parseAmountFromText(text);
       const db = createBotDb(botId);
       const user = await db.getUserByTelegramId(userId);
       if (!user) {
-        return res.status(403).json({ error: 'User not found' });
+        return res.status(403).json({ error: 'المستخدم غير موجود' });
       }
       const spinsAvailable = Number(user.wheel_spins_available_today ?? 0);
       if (spinsAvailable <= 0) {
-        return res.status(403).json({ error: 'No spins available' });
+        return res.status(403).json({ error: 'لا توجد لفات متاحة' });
       }
       try {
         const applied = await db.useSpinCredit(userId, amount);
         if (!applied) {
-          return res.status(403).json({ error: 'No spins available or already used' });
+          return res.status(403).json({ error: 'لا توجد لفات متاحة أو تم استهلاكها' });
         }
         res.json({ ok: true, amount });
       } catch (err) {
-        res.status(500).json({ error: 'Failed to credit' });
+        res.status(500).json({ error: 'فشل إضافة الرصيد' });
       }
     });
 
