@@ -47,6 +47,19 @@
       return params.get('bot_id') || '';
     }
 
+    // Try multiple ways to obtain Telegram init data so the app
+    // also works on Telegram Web where data may come via URL.
+    function getInitData() {
+      const direct = (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData) || '';
+      if (direct && direct.length > 0) return direct;
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const fromHash = hashParams.get('tgWebAppData');
+      if (fromHash && fromHash.length > 0) return fromHash;
+      const searchParams = new URLSearchParams(window.location.search);
+      const fromSearch = searchParams.get('tgWebAppData') || searchParams.get('init_data');
+      return fromSearch || '';
+    }
+
     async function init() {
       if (typeof Telegram === 'undefined' || !Telegram.WebApp) {
         document.getElementById('message').innerText = '❌ يرجى فتح التطبيق من داخل Telegram';
@@ -57,7 +70,7 @@
       Telegram.WebApp.disableClosingConfirmation();
 
       const botId = getBotId();
-      const initData = Telegram.WebApp.initData || '';
+      const initData = getInitData();
       if (!botId || !initData) {
         document.getElementById('message').innerText = '❌ رابط غير صالح. افتح من البوت.';
         return;
