@@ -41,10 +41,16 @@
     let finalPrizes = [];
     let winningIndex = 0;
     let stopAngle = 0;
+    let spinTokenUsed = ''; // store for result API
 
     function getBotId() {
       const params = new URLSearchParams(window.location.search);
       return params.get('bot_id') || '';
+    }
+
+    function getSpinToken() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('spin_token') || '';
     }
 
     // Try multiple ways to obtain Telegram init data so the app
@@ -60,27 +66,43 @@
       return fromSearch || '';
     }
 
+    // We can proceed with either initData (from Telegram) or spin_token (from bot link).
+    function hasValidAuth() {
+      const botId = getBotId();
+      const initData = getInitData();
+      const spinToken = getSpinToken();
+      return botId && (initData || spinToken);
+    }
+
     async function init() {
-      if (typeof Telegram === 'undefined' || !Telegram.WebApp) {
-        document.getElementById('message').innerText = '❌ يرجى فتح التطبيق من داخل Telegram';
-        return;
+      // Allow running inside Telegram Web App or with spin_token from bot link
+      const inTelegram = typeof Telegram !== 'undefined' && Telegram.WebApp;
+      if (inTelegram) {
+        Telegram.WebApp.ready();
+        Telegram.WebApp.expand();
+        Telegram.WebApp.disableClosingConfirmation();
       }
-      Telegram.WebApp.ready();
-      Telegram.WebApp.expand();
-      Telegram.WebApp.disableClosingConfirmation();
 
       const botId = getBotId();
       const initData = getInitData();
-      if (!botId || !initData) {
+      const spinToken = getSpinToken();
+      spinTokenUsed = spinToken;
+
+      if (!botId) {
+        document.getElementById('message').innerText = '❌ رابط غير صالح. افتح من البوت.';
+        return;
+      }
+      if (!initData && !spinToken) {
         document.getElementById('message').innerText = '❌ رابط غير صالح. افتح من البوت.';
         return;
       }
 
       try {
-        const url = '/api/spin/config?bot_id=' + encodeURIComponent(botId);
-        const res = await fetch(url, {
-          headers: { 'X-Telegram-Init-Data': initData }
-        });
+        let url = '/api/spin/config?bot_id=' + encodeURIComponent(botId);
+        if (spinToken) url += '&spin_token=' + encodeURIComponent(spinToken);
+        const opts = {};
+        if (initData) opts.headers = { 'X-Telegram-Init-Data': initData };
+        const res = await fetch(url, opts);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           const msg = data.error || 'فشل تحميل الإعدادات';

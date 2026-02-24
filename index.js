@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { initDb, createBotDb, getAllBots, getActiveBots, getBotRowById, createBotRow, updateBotRow, deleteBotRow } = require('./lib/db');
 const { verifyInitData, parseAmountFromText } = require('./lib/telegram-initdata');
+const { verifySpinToken } = require('./lib/spin-token');
 const createBotInstance = require('./lib/bot-instance');
 const { createApiClient } = require('./lib/ichancy-api');
 
@@ -188,20 +189,35 @@ function renderBotForm(bot, isEdit) {
     app.get('/api/spin/config', async (req, res) => {
       const botId = (req.query.bot_id || '').trim();
       const initData = (req.headers['x-telegram-init-data'] || req.query.init_data || '').trim();
-      if (!botId || !initData) {
-        return res.status(400).json({ error: 'bot_id and init_data required' });
+      const spinToken = (req.query.spin_token || '').trim();
+      if (!botId) {
+        return res.status(400).json({ error: 'bot_id required' });
       }
       const bot = await getBotRowById(botId);
       if (!bot || !bot.bot_token) {
         return res.status(404).json({ error: 'Bot not found' });
       }
-      const result = verifyInitData(initData, bot.bot_token);
-      if (!result.valid) {
-        return res.status(401).json({ error: 'Invalid initData' });
-      }
-      const userId = result.payload?.user?.id;
-      if (!userId) {
-        return res.status(401).json({ error: 'User not in initData' });
+      let userId;
+      if (spinToken) {
+        const parsed = verifySpinToken(spinToken, bot.bot_token);
+        if (!parsed) {
+          return res.status(401).json({ error: 'Invalid or expired spin link. Open from the bot again.' });
+        }
+        if (parsed.botId !== botId) {
+          return res.status(401).json({ error: 'Token bot mismatch' });
+        }
+        userId = parsed.userId;
+      } else if (initData) {
+        const result = verifyInitData(initData, bot.bot_token);
+        if (!result.valid) {
+          return res.status(401).json({ error: 'Invalid initData' });
+        }
+        userId = result.payload?.user?.id;
+        if (!userId) {
+          return res.status(401).json({ error: 'User not in initData' });
+        }
+      } else {
+        return res.status(400).json({ error: 'init_data or spin_token required' });
       }
       const db = createBotDb(botId);
       const user = await db.getUserByTelegramId(userId);
@@ -228,24 +244,34 @@ function renderBotForm(bot, isEdit) {
     });
 
     app.post('/api/spin/result', async (req, res) => {
-      const { init_data, bot_id, prize_index, text } = req.body || {};
+      const { init_data, spin_token, bot_id, prize_index, text } = req.body || {};
       const initData = (init_data || '').trim();
+      const spinToken = (spin_token || '').trim();
       const botId = (bot_id || '').trim();
       const idx = parseInt(prize_index, 10);
-      if (!initData || !botId || !Number.isFinite(idx) || typeof text !== 'string') {
+      if ((!initData && !spinToken) || !botId || !Number.isFinite(idx) || typeof text !== 'string') {
         return res.status(400).json({ error: 'Invalid request' });
       }
       const bot = await getBotRowById(botId);
       if (!bot || !bot.bot_token) {
         return res.status(404).json({ error: 'Bot not found' });
       }
-      const result = verifyInitData(initData, bot.bot_token);
-      if (!result.valid) {
-        return res.status(401).json({ error: 'Invalid initData' });
-      }
-      const userId = result.payload?.user?.id;
-      if (!userId) {
-        return res.status(401).json({ error: 'User not in initData' });
+      let userId;
+      if (spinToken) {
+        const parsed = verifySpinToken(spinToken, bot.bot_token);
+        if (!parsed || parsed.botId !== botId) {
+          return res.status(401).json({ error: 'Invalid or expired spin link' });
+        }
+        userId = parsed.userId;
+      } else {
+        const result = verifyInitData(initData, bot.bot_token);
+        if (!result.valid) {
+          return res.status(401).json({ error: 'Invalid initData' });
+        }
+        userId = result.payload?.user?.id;
+        if (!userId) {
+          return res.status(401).json({ error: 'User not in initData' });
+        }
       }
       const prizes = Array.isArray(bot.spin_prizes) && bot.spin_prizes.length > 0
         ? bot.spin_prizes
