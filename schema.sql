@@ -11,29 +11,99 @@ USE ichancy_bot;
 
 -- Users: Telegram users and their bot account / balance / gifts
 CREATE TABLE IF NOT EXISTS users (
-  id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  telegram_user_id  BIGINT NOT NULL COMMENT 'Telegram from.id',
-  telegram_username VARCHAR(255) NULL COMMENT 'Telegram @username',
-  first_name        VARCHAR(255) NULL,
-  last_name         VARCHAR(255) NULL,
-  ichancy_login     VARCHAR(255) NULL COMMENT 'Ichancy account name e.g. Bot-User123',
-  balance           DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Balance in currency',
-  gifts             DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Gifts balance',
-  ichancy_user_id   VARCHAR(64) NULL COMMENT 'Ichancy platform user number',
+  id                        INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  bot_id                    VARCHAR(128) NOT NULL DEFAULT '',
+  telegram_user_id          BIGINT NOT NULL COMMENT 'Telegram from.id',
+  telegram_username         VARCHAR(255) NULL COMMENT 'Telegram @username',
+  first_name                VARCHAR(255) NULL,
+  last_name                 VARCHAR(255) NULL,
+  ichancy_login             VARCHAR(255) NULL COMMENT 'Ichancy account name e.g. Bot-User123',
+  password                  VARCHAR(255) NULL COMMENT 'Ichancy account password',
+  balance                   DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Balance in currency',
+  gifts                     DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Gifts balance',
+  ichancy_user_id           VARCHAR(64) NULL COMMENT 'Ichancy platform user number',
   wheel_spins_available_today INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Wheel spins available today',
-  last_spin_grant_date        DATE NULL COMMENT 'Syria date when daily spin was last granted',
-  last_box_game_at  DATETIME NULL COMMENT 'Last time user played box game (one per 24h)',
+  last_spin_grant_date      DATE NULL COMMENT 'Syria date when daily spin was last granted',
+  last_box_game_at          DATETIME NULL COMMENT 'Last time user played box game (one per 24h)',
+  referred_by               BIGINT NULL COMMENT 'Telegram ID of user who referred this user',
+  referral_net_l1           DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Running L1 referral net balance',
+  referral_net_l2           DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Running L2 referral net balance',
+  referral_net_l3           DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Running L3 referral net balance',
+  custom_referral_percent   FLOAT NULL DEFAULT NULL COMMENT 'Per-user L1 referral override (null = use global)',
+  created_at                DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at                DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_bot_telegram_user_id (bot_id, telegram_user_id),
+  KEY idx_ichancy_login (ichancy_login)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Deleted users: archive of removed user records
+CREATE TABLE IF NOT EXISTS deleted_users (
+  id                        INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  bot_id                    VARCHAR(128) NOT NULL DEFAULT '',
+  telegram_user_id          BIGINT NOT NULL,
+  telegram_username         VARCHAR(255) NULL,
+  first_name                VARCHAR(255) NULL,
+  last_name                 VARCHAR(255) NULL,
+  ichancy_login             VARCHAR(255) NULL,
+  password                  VARCHAR(255) NULL,
+  balance                   DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+  gifts                     DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+  ichancy_user_id           VARCHAR(64) NULL,
+  wheel_spins_available_today INT UNSIGNED DEFAULT 0,
+  last_spin_grant_date      DATE NULL,
+  last_box_game_at          DATETIME NULL,
+  deleted_at                DATETIME NOT NULL,
+  PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Gift codes: admin-created promotional codes that grant balance
+CREATE TABLE IF NOT EXISTS gift_codes (
+  id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  bot_id            VARCHAR(128) NOT NULL DEFAULT '',
+  code              VARCHAR(64) NOT NULL,
+  amount            INT UNSIGNED NOT NULL,
+  expiry_date       DATETIME NULL,
+  max_redemptions   INT UNSIGNED NULL,
+  is_active         TINYINT(1) NOT NULL DEFAULT 1,
+  published         TINYINT(1) NOT NULL DEFAULT 0,
   created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY uq_telegram_user_id (telegram_user_id),
-  KEY idx_ichancy_login (ichancy_login)
+  UNIQUE KEY uq_bot_code (bot_id, code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Gift code redemptions: tracks which user redeemed which code
+CREATE TABLE IF NOT EXISTS gift_code_redemptions (
+  id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  bot_id            VARCHAR(128) NOT NULL DEFAULT '',
+  gift_code_id      INT UNSIGNED NOT NULL COMMENT 'FK to gift_codes.id',
+  telegram_user_id  BIGINT NOT NULL,
+  redeemed_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_code_user (gift_code_id, telegram_user_id),
+  CONSTRAINT fk_redemption_code FOREIGN KEY (gift_code_id) REFERENCES gift_codes(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Transactions: deposit and withdrawal log
+CREATE TABLE IF NOT EXISTS transactions (
+  id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  bot_id            VARCHAR(128) NOT NULL DEFAULT '',
+  telegram_user_id  BIGINT NOT NULL,
+  type              ENUM('deposit','withdrawal') NOT NULL,
+  amount            DECIMAL(18,2) NOT NULL,
+  method            VARCHAR(64) NOT NULL COMMENT 'e.g. syriatel, sham_usd, sham_syp, balance_to_site, site_to_balance',
+  transfer_id       VARCHAR(128) NULL COMMENT 'External payment transfer reference',
+  status            ENUM('pending','confirmed','rejected') NOT NULL DEFAULT 'pending',
+  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_bot_user_type (bot_id, telegram_user_id, type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Syriatel used transaction numbers (last 3 days only; app cleans older rows).
 CREATE TABLE IF NOT EXISTS syriatel_used_transactions (
   id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  bot_id            VARCHAR(128) NOT NULL,
+  bot_id            VARCHAR(128) NOT NULL DEFAULT '',
   transaction_no    VARCHAR(128) NOT NULL,
   used_at           DATETIME NOT NULL,
   PRIMARY KEY (id),
@@ -44,7 +114,7 @@ CREATE TABLE IF NOT EXISTS syriatel_used_transactions (
 -- ShamCash used transaction numbers (last 3 days only; app cleans older rows). Prevents same transfer number being redeemed twice.
 CREATE TABLE IF NOT EXISTS shamcash_used_transactions (
   id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  bot_id            VARCHAR(128) NOT NULL,
+  bot_id            VARCHAR(128) NOT NULL DEFAULT '',
   transaction_no    VARCHAR(128) NOT NULL,
   used_at           DATETIME NOT NULL,
   PRIMARY KEY (id),
@@ -52,13 +122,7 @@ CREATE TABLE IF NOT EXISTS shamcash_used_transactions (
   KEY idx_bot_used_at (bot_id, used_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Bots: one row per bot; config stored in columns. Sequelize sync creates/alters this table. config stored in columns. Sequelize sync creates/alters this table.
--- Key columns for admin "إدارة النسب" (manage rates):
---   exchange_rate_syp_per_usd  FLOAT NOT NULL DEFAULT 15000  (Lebanese pounds per 1 USD)
--- Other columns: bot_token, bot_username, channel_username, syriatel_deposit_numbers,
---   sham_cash_deposit_code, referral_level1_percent, referral_level2_percent, referral_level3_percent,
---   deposit_syriatel_enabled, deposit_shamcash_enabled, withdraw_syriatel_enabled, withdraw_shamcash_enabled,
---   spin_prizes (JSON), luck_box_prizes (JSON), etc.
+-- Bots: one row per bot; config stored in columns. Sequelize sync creates/alters this table.
 CREATE TABLE IF NOT EXISTS bots (
   id                        INT UNSIGNED NOT NULL AUTO_INCREMENT,
   bot_id                    VARCHAR(128) NOT NULL,
@@ -70,9 +134,9 @@ CREATE TABLE IF NOT EXISTS bots (
   username_prefix           VARCHAR(64) NULL DEFAULT 'Bot-',
   channel_username          VARCHAR(255) NULL,
   debug_mode                TINYINT(1) NOT NULL DEFAULT 0,
-  debug_logs                 TINYINT(1) NOT NULL DEFAULT 0,
+  debug_logs                TINYINT(1) NOT NULL DEFAULT 0,
   cookie_refresh_interval_minutes INT NOT NULL DEFAULT 5,
-  ichancy_agent_username     VARCHAR(255) NULL,
+  ichancy_agent_username    VARCHAR(255) NULL,
   ichancy_agent_password    VARCHAR(255) NULL,
   ichancy_parent_id         VARCHAR(64) NULL,
   golden_tree_url           TEXT NULL,
@@ -120,6 +184,37 @@ CREATE TABLE IF NOT EXISTS payment_providers (
   updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_bot_provider (bot_id, provider_name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Referral net balance details: per (referrer, referred_user, level) tracking of net site transfers.
+-- net_balance increases when referred user deposits to site, decreases when they withdraw from site.
+CREATE TABLE IF NOT EXISTS referral_net_details (
+  id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  bot_id            VARCHAR(128) NOT NULL DEFAULT '',
+  referrer_id       BIGINT NOT NULL COMMENT 'Telegram ID of the referrer who earns commission',
+  referred_user_id  BIGINT NOT NULL COMMENT 'Telegram ID of the referred user whose transfers affect this',
+  level             TINYINT UNSIGNED NOT NULL COMMENT '1, 2, or 3',
+  net_balance       DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Running net: deposit_to_site minus withdraw_from_site',
+  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_bot_referrer_referred_level (bot_id, referrer_id, referred_user_id, level),
+  KEY idx_bot_referrer (bot_id, referrer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Referral distribution history: log of each commission payout event.
+CREATE TABLE IF NOT EXISTS referral_distributions (
+  id                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  bot_id              VARCHAR(128) NOT NULL DEFAULT '',
+  referrer_id         BIGINT NOT NULL,
+  commission_amount   DECIMAL(18,2) NOT NULL COMMENT 'Total commission paid in this distribution',
+  net_l1_snapshot     DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Aggregate L1 net balance at distribution time',
+  net_l2_snapshot     DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+  net_l3_snapshot     DECIMAL(18,2) NOT NULL DEFAULT 0.00,
+  details_json        JSON NULL COMMENT 'Per-referred-user detail snapshot at distribution',
+  distributed_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_bot_referrer (bot_id, referrer_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Pending ShamCash withdrawal requests (user requested; admin accepts/rejects or user cancels).
