@@ -1,0 +1,28 @@
+[Unit]
+Description=Mobile SOCKS Proxy
+After=network.target
+
+[Service]
+Type=simple
+User=root
+
+# Safe cleanup (ignore failure)
+ExecStartPre=-/usr/bin/pkill -f "ssh.*-D 127.0.0.1:1081"
+
+# Main proxy command
+ExecStart=/usr/bin/ssh \
+-i /root/.ssh/phone_proxy_key \
+-o StrictHostKeyChecking=no \
+-o ServerAliveInterval=30 \
+-o ServerAliveCountMax=3 \
+-o TCPKeepAlive=yes \
+-o ExitOnForwardFailure=yes \
+-N -D 127.0.0.1:1081 \
+-p 2222 \
+u0_a242@127.0.0.1
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

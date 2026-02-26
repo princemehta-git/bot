@@ -1,0 +1,56 @@
+#!/data/data/com.termux/files/usr/bin/bash
+
+# ============================
+# Production-grade Termux Tunnel Script
+# Self-healing, network-safe, reboot-safe
+# ============================
+
+SERVER="157.173.218.210"
+SERVER_USER="root"
+REMOTE_PORT="2222"
+LOCAL_PORT="8022"
+
+# Keep device awake
+termux-wake-lock
+
+# Ensure sshd running
+pgrep sshd >/dev/null || sshd
+
+while true
+do
+    echo "Checking network..."
+
+    # Wait until VPS reachable
+    ping -c 1 -W 3 $SERVER >/dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "Network unavailable. Retrying in 5 seconds..."
+        sleep 5
+        continue
+    fi
+
+    echo "Cleaning old sessions..."
+
+    # Kill local autossh safely
+    pkill -f "autossh.*${SERVER}.*${REMOTE_PORT}" 2>/dev/null
+
+    sleep 2
+
+    echo "Starting tunnel..."
+
+    autossh \
+        -4 \
+        -M 0 \
+        -N \
+        -o ServerAliveInterval=30 \
+        -o ServerAliveCountMax=3 \
+        -o TCPKeepAlive=yes \
+        -o ExitOnForwardFailure=yes \
+        -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
+        -o ConnectTimeout=10 \
+        -R ${REMOTE_PORT}:localhost:${LOCAL_PORT} \
+        ${SERVER_USER}@${SERVER}
+
+    echo "Tunnel disconnected. Restarting in 5 seconds..."
+    sleep 5
+done
