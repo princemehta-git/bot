@@ -16,7 +16,15 @@ const ADMIN_USER = (process.env.ADMIN_USER || 'admin').trim();
 const ADMIN_PASS = (process.env.ADMIN_PASS || 'admin').trim();
 const WEB_PORT = parseInt(process.env.WEB_PORT || process.env.WEBHOOK_PORT || '3000', 10) || 3000;
 const USE_WEBHOOK = process.env.USE_WEBHOOK === 'true' || process.env.USE_WEBHOOK === '1';
-const WEBHOOK_DOMAIN = (process.env.WEBHOOK_DOMAIN || '').trim().replace(/\/$/, '');
+// WEBHOOK_DOMAIN = bare hostname, e.g. "yourdomain.com"
+// SPIN_SITE_URL  = full URL,   e.g. "https://yourdomain.com"
+// Either one is enough — the other is derived automatically.
+const _spinSiteRaw = (process.env.SPIN_SITE_URL || '').trim().replace(/\/$/, '');
+const _webhookDomainRaw = (process.env.WEBHOOK_DOMAIN || '').trim().replace(/\/$/, '');
+// Derive WEBHOOK_DOMAIN from SPIN_SITE_URL if not explicitly set
+const WEBHOOK_DOMAIN = _webhookDomainRaw || (_spinSiteRaw ? _spinSiteRaw.replace(/^https?:\/\//, '') : '');
+// Derive the canonical public base URL (always https in production)
+const PUBLIC_BASE_URL = _spinSiteRaw || (WEBHOOK_DOMAIN ? `https://${WEBHOOK_DOMAIN}` : '');
 
 // ── Session store ────────────────────────────────────────────────────
 const sessions = new Map();
@@ -50,10 +58,7 @@ async function startBot(botRow) {
     options.webhookDomain = WEBHOOK_DOMAIN;
     options.webhookPath = `/webhook/${encodeURIComponent(botRow.bot_id)}`;
   }
-  // Spin Mini App requires HTTPS. Use SPIN_SITE_URL (e.g. ngrok or deployed URL) when running on localhost.
-  const spinSiteUrl = (process.env.SPIN_SITE_URL || '').trim().replace(/\/$/, '');
-  const spinBaseFallback = process.env.SPIN_BASE_URL || (WEBHOOK_DOMAIN ? `https://${WEBHOOK_DOMAIN}` : `http://localhost:${WEB_PORT}`);
-  options.spinBaseUrl = (spinSiteUrl || spinBaseFallback).replace(/\/$/, '');
+  options.spinBaseUrl = (PUBLIC_BASE_URL || `http://localhost:${WEB_PORT}`).replace(/\/$/, '');
   try {
     const ok = await instance.start(options);
     if (ok) {
@@ -98,33 +103,53 @@ function layout(title, body) {
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
 a{color:#60a5fa;text-decoration:none}a:hover{text-decoration:underline}
-.container{max-width:960px;margin:0 auto;padding:24px}
+.container{max-width:1000px;margin:0 auto;padding:24px}
 .card{background:#1e293b;border-radius:12px;padding:24px;margin-bottom:20px;border:1px solid #334155}
 h1{font-size:1.8rem;margin-bottom:16px;color:#f8fafc}
 h2{font-size:1.3rem;margin-bottom:12px;color:#f1f5f9}
+h3{font-size:1rem;margin-bottom:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
 .btn{display:inline-block;padding:8px 20px;border-radius:8px;border:none;font-size:.9rem;cursor:pointer;font-weight:600;transition:all .15s}
 .btn-primary{background:#3b82f6;color:#fff}.btn-primary:hover{background:#2563eb}
 .btn-success{background:#22c55e;color:#fff}.btn-success:hover{background:#16a34a}
 .btn-danger{background:#ef4444;color:#fff}.btn-danger:hover{background:#dc2626}
 .btn-warning{background:#f59e0b;color:#000}.btn-warning:hover{background:#d97706}
+.btn-secondary{background:#475569;color:#e2e8f0}.btn-secondary:hover{background:#334155}
 .btn-sm{padding:5px 12px;font-size:.8rem}
 input,select,textarea{width:100%;padding:10px 14px;border-radius:8px;border:1px solid #475569;background:#0f172a;color:#e2e8f0;font-size:.95rem;margin-bottom:12px}
 input:focus,select:focus,textarea:focus{outline:none;border-color:#3b82f6}
 label{display:block;margin-bottom:4px;font-weight:600;color:#94a3b8;font-size:.85rem}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 .badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:700}
 .badge-green{background:#166534;color:#4ade80}.badge-red{background:#7f1d1d;color:#fca5a5}
-.badge-yellow{background:#713f12;color:#fbbf24}
+.badge-yellow{background:#713f12;color:#fbbf24}.badge-blue{background:#1e3a5f;color:#60a5fa}
 table{width:100%;border-collapse:collapse}
 th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #334155}
 th{color:#94a3b8;font-size:.8rem;text-transform:uppercase}
+tr:last-child td{border-bottom:none}
 .flash{padding:12px 16px;border-radius:8px;margin-bottom:16px;font-weight:600}
 .flash-ok{background:#14532d;color:#86efac;border:1px solid #166534}
 .flash-err{background:#7f1d1d;color:#fca5a5;border:1px solid #991b1b}
 .login-wrap{display:flex;align-items:center;justify-content:center;min-height:100vh}
-.login-box{width:360px}
-.actions{display:flex;gap:6px;flex-wrap:wrap}
-</style></head><body>${body}</body></html>`;
+.login-box{width:380px}
+.actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.section-divider{border:none;border-top:1px solid #334155;margin:20px 0}
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:42px;margin-bottom:12px}
+.pw-toggle{position:absolute;right:12px;top:10px;background:none;border:none;color:#64748b;cursor:pointer;font-size:.85rem;padding:0}
+.pw-toggle:hover{color:#94a3b8}
+.stat-card{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:16px 20px;text-align:center}
+.stat-num{font-size:2rem;font-weight:700;color:#f8fafc}
+.stat-lbl{font-size:.8rem;color:#64748b;text-transform:uppercase;margin-top:2px}
+.info-box{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:.85rem;color:#94a3b8;margin-bottom:12px;word-break:break-all}
+nav{display:flex;align-items:center;gap:8px;margin-bottom:20px;font-size:.9rem;color:#64748b}
+nav a{color:#60a5fa}nav span{color:#475569}
+</style>
+<script>
+function confirmAction(msg,form){if(confirm(msg)){form.submit();}return false;}
+function togglePw(btn){var inp=btn.previousElementSibling;inp.type=inp.type==='password'?'text':'password';btn.textContent=inp.type==='password'?'Show':'Hide';}
+</script>
+</head><body>${body}</body></html>`;
 }
 
 // ── Bot form fields ──────────────────────────────────────────────────
@@ -149,16 +174,45 @@ const BOT_FIELDS = [
 
 function renderBotForm(bot, isEdit) {
   let html = '';
-  for (const f of BOT_FIELDS) {
-    const val = bot[f.key] ?? '';
-    if (f.type === 'checkbox') {
-      const checked = val ? 'checked' : '';
-      html += `<label><input type="checkbox" name="${f.key}" value="1" ${checked} style="width:auto;margin-right:8px"> ${esc(f.label)}</label><br><br>`;
-    } else {
-      const disabled = isEdit && f.editDisabled ? 'disabled' : '';
-      const req = f.required && !isEdit ? 'required' : '';
-      html += `<label>${esc(f.label)}</label><input type="${f.type}" name="${f.key}" value="${esc(val)}" ${disabled} ${req}>`;
-      if (isEdit && f.editDisabled) html += `<input type="hidden" name="${f.key}" value="${esc(val)}">`;
+  const identityKeys = ['bot_id', 'bot_token', 'bot_username', 'bot_display_name', 'username_prefix'];
+  // Group: Telegram settings
+  const telegramKeys = ['channel_username', 'admin_username', 'support_username'];
+  // Group: Ichancy API
+  const ichancyKeys = ['ichancy_agent_username', 'ichancy_agent_password', 'ichancy_site_url', 'ichancy_parent_id', 'golden_tree_url'];
+  // Group: Options
+  const optionKeys = ['is_active', 'debug_mode', 'debug_logs'];
+
+  const groups = [
+    { label: 'Identity', keys: identityKeys },
+    { label: 'Telegram', keys: telegramKeys },
+    { label: 'Ichancy API', keys: ichancyKeys },
+    { label: 'Options', keys: optionKeys },
+  ];
+
+  const fieldMap = Object.fromEntries(BOT_FIELDS.map(f => [f.key, f]));
+  let first = true;
+  for (const group of groups) {
+    if (!first) html += '<hr class="section-divider">';
+    first = false;
+    html += `<h3>${group.label}</h3>`;
+    for (const key of group.keys) {
+      const f = fieldMap[key];
+      if (!f) continue;
+      const val = bot[f.key] ?? '';
+      if (f.type === 'checkbox') {
+        const checked = val ? 'checked' : '';
+        html += `<label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer"><input type="checkbox" name="${f.key}" value="1" ${checked} style="width:auto;margin:0"> <span style="color:#e2e8f0;font-size:.95rem;font-weight:500">${esc(f.label)}</span></label>`;
+      } else if (f.type === 'password') {
+        const disabled = isEdit && f.editDisabled ? 'disabled' : '';
+        const req = f.required && !isEdit ? 'required' : '';
+        html += `<label>${esc(f.label)}</label><div class="pw-wrap"><input type="password" name="${f.key}" value="${esc(val)}" ${disabled} ${req} autocomplete="new-password"><button type="button" class="pw-toggle" onclick="togglePw(this)">Show</button></div>`;
+        if (isEdit && f.editDisabled) html += `<input type="hidden" name="${f.key}" value="${esc(val)}">`;
+      } else {
+        const disabled = isEdit && f.editDisabled ? 'disabled' : '';
+        const req = f.required && !isEdit ? 'required' : '';
+        html += `<label>${esc(f.label)}</label><input type="${f.type}" name="${f.key}" value="${esc(val)}" ${disabled} ${req}>`;
+        if (isEdit && f.editDisabled) html += `<input type="hidden" name="${f.key}" value="${esc(val)}">`;
+      }
     }
   }
   return html;
@@ -233,7 +287,7 @@ function renderBotForm(bot, isEdit) {
       const prizes = Array.isArray(bot.spin_prizes) && bot.spin_prizes.length > 0
         ? bot.spin_prizes
         : [{ text: 'حظ أوفر', weight: 80 }, { text: '💰 5000', weight: 5 }, { text: '💎 10000', weight: 10 }, { text: '👑 25000', weight: 5 }];
-      const baseUrl = WEBHOOK_DOMAIN ? `https://${WEBHOOK_DOMAIN}` : `http://localhost:${WEB_PORT}`;
+      const baseUrl = PUBLIC_BASE_URL || `http://localhost:${WEB_PORT}`;
       res.json({
         prizes,
         user_id: userId,
@@ -351,6 +405,9 @@ function renderBotForm(bot, isEdit) {
       const flash = _req.cookies?.flash || '';
       res.setHeader('Set-Cookie', 'flash=; Path=/; HttpOnly; Max-Age=0');
       const bots = await getAllBots();
+      const totalBots = bots.length;
+      const runningCount = bots.filter(b => runningBots.has(b.bot_id)).length;
+      const activeCount = bots.filter(b => b.is_active).length;
       let rows = '';
       for (const b of bots) {
         const isRunning = runningBots.has(b.bot_id);
@@ -359,30 +416,42 @@ function renderBotForm(bot, isEdit) {
           : isRunning
             ? '<span class="badge badge-green">Running</span>'
             : '<span class="badge badge-yellow">Stopped</span>';
-        const webhookInfo = USE_WEBHOOK && isRunning ? `<br><small style="color:#64748b">/webhook/${esc(b.bot_id)}</small>` : '';
+        const modeBadge = USE_WEBHOOK
+          ? '<span class="badge badge-blue" style="font-size:.7rem">Webhook</span>'
+          : '<span class="badge" style="background:#1e3a2f;color:#4ade80;font-size:.7rem">Polling</span>';
+        const webhookPath = USE_WEBHOOK && isRunning ? `<br><small style="color:#475569;font-family:monospace">/webhook/${esc(b.bot_id)}</small>` : '';
         rows += `<tr>
-          <td><strong>${esc(b.bot_display_name || b.bot_id)}</strong><br><small style="color:#64748b">${esc(b.bot_id)}</small>${webhookInfo}</td>
-          <td>${esc(b.bot_username || '—')}</td>
-          <td>${statusBadge}</td>
+          <td><strong>${esc(b.bot_display_name || b.bot_id)}</strong><br><small style="color:#64748b">${esc(b.bot_id)}</small>${webhookPath}</td>
+          <td style="color:#94a3b8">${esc(b.bot_username || '—')}</td>
+          <td>${statusBadge} ${modeBadge}</td>
           <td class="actions">
             <a href="/admin/bots/${encodeURIComponent(b.bot_id)}" class="btn btn-primary btn-sm">Edit</a>
             ${b.is_active && !isRunning ? `<form method="POST" action="/admin/bots/${encodeURIComponent(b.bot_id)}/start" style="display:inline"><button class="btn btn-success btn-sm">Start</button></form>` : ''}
-            ${isRunning ? `<form method="POST" action="/admin/bots/${encodeURIComponent(b.bot_id)}/stop" style="display:inline"><button class="btn btn-warning btn-sm">Stop</button></form>` : ''}
+            ${isRunning ? `<form method="POST" action="/admin/bots/${encodeURIComponent(b.bot_id)}/restart" style="display:inline"><button class="btn btn-secondary btn-sm">Restart</button></form>` : ''}
+            ${isRunning ? `<form method="POST" action="/admin/bots/${encodeURIComponent(b.bot_id)}/stop" style="display:inline" onsubmit="return confirmAction('Stop bot ${esc(b.bot_display_name || b.bot_id)}?',this)"><button class="btn btn-warning btn-sm">Stop</button></form>` : ''}
           </td>
         </tr>`;
       }
+      const modeInfo = USE_WEBHOOK
+        ? `<div class="card" style="border-color:#1e3a5f"><h3 style="color:#60a5fa">Webhook Mode</h3><p style="color:#94a3b8;margin-bottom:8px">Base URL: <strong style="color:#e2e8f0">${esc(PUBLIC_BASE_URL || WEBHOOK_DOMAIN)}</strong></p><p style="color:#64748b;font-size:.85rem">Each bot receives updates at <code>${esc(PUBLIC_BASE_URL || `https://${WEBHOOK_DOMAIN}`)}/webhook/&lt;bot_id&gt;</code></p></div>`
+        : `<div class="card" style="border-color:#1e3a2f"><h3 style="color:#4ade80">Polling Mode</h3><p style="color:#94a3b8">Each bot uses long-polling to receive updates from Telegram.</p></div>`;
       res.send(layout('Dashboard', `<div class="container">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-          <h1>🤖 Bot Manager</h1>
-          <div><a href="/admin/bots/new" class="btn btn-success">+ Add Bot</a> <a href="/admin/logout" class="btn btn-danger btn-sm" style="margin-left:8px">Logout</a></div>
+          <h1>Bot Manager</h1>
+          <div style="display:flex;gap:8px"><a href="/admin/bots/new" class="btn btn-success">+ Add Bot</a><a href="/admin/logout" class="btn btn-danger btn-sm">Logout</a></div>
         </div>
         ${flash ? `<div class="flash ${flash.startsWith('Error') ? 'flash-err' : 'flash-ok'}">${esc(flash)}</div>` : ''}
-        <div class="card">
-          <h2>All Bots (${bots.length})</h2>
-          <table><thead><tr><th>Bot</th><th>Username</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#64748b">No bots yet. Click "Add Bot" to create one.</td></tr>'}</tbody></table>
+        <div class="grid-3" style="margin-bottom:20px">
+          <div class="stat-card"><div class="stat-num">${totalBots}</div><div class="stat-lbl">Total Bots</div></div>
+          <div class="stat-card"><div class="stat-num" style="color:#4ade80">${runningCount}</div><div class="stat-lbl">Running</div></div>
+          <div class="stat-card"><div class="stat-num" style="color:#60a5fa">${activeCount}</div><div class="stat-lbl">Active</div></div>
         </div>
-        ${USE_WEBHOOK ? `<div class="card"><h2>Webhook Mode</h2><p style="color:#94a3b8">Domain: <code>${esc(WEBHOOK_DOMAIN)}</code> — Each bot receives updates at <code>/webhook/&lt;bot_id&gt;</code></p></div>` : '<div class="card"><h2>Polling Mode</h2><p style="color:#94a3b8">Each bot uses long-polling to receive updates from Telegram.</p></div>'}
+        <div class="card">
+          <h2>All Bots</h2>
+          <table><thead><tr><th>Bot</th><th>Username</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#64748b;padding:32px">No bots yet. Click "+ Add Bot" to create one.</td></tr>'}</tbody></table>
+        </div>
+        ${modeInfo}
       </div>`));
     });
 
@@ -390,12 +459,15 @@ function renderBotForm(bot, isEdit) {
     app.get('/admin/bots/new', authMiddleware, (_req, res) => {
       const defaults = { is_active: true, debug_logs: true, bot_display_name: 'New Bot', username_prefix: 'Bot-' };
       res.send(layout('Add Bot', `<div class="container">
+        <nav><a href="/admin">Dashboard</a><span>/</span><span>Add Bot</span></nav>
         <h1>Add New Bot</h1>
         <div class="card" style="margin-top:16px">
           <form method="POST" action="/admin/bots">
             ${renderBotForm(defaults, false)}
-            <button type="submit" class="btn btn-success" style="margin-top:12px">Create Bot</button>
-            <a href="/admin" class="btn btn-danger" style="margin-left:8px">Cancel</a>
+            <div style="display:flex;gap:8px;margin-top:16px">
+              <button type="submit" class="btn btn-success">Create Bot</button>
+              <a href="/admin" class="btn btn-secondary">Cancel</a>
+            </div>
           </form>
         </div>
       </div>`));
@@ -433,31 +505,46 @@ function renderBotForm(bot, isEdit) {
     // ── Edit bot ──
     app.get('/admin/bots/:id', authMiddleware, async (req, res) => {
       const bot = await getBotRowById(req.params.id);
-      if (!bot) return res.status(404).send(layout('Not Found', '<div class="container"><h1>Bot not found</h1><a href="/admin">Back</a></div>'));
+      if (!bot) return res.status(404).send(layout('Not Found', '<div class="container"><nav><a href="/admin">Dashboard</a></nav><h1>Bot not found</h1><a href="/admin" class="btn btn-primary">Back</a></div>'));
       const isRunning = runningBots.has(bot.bot_id);
       const spinPrizesVal = Array.isArray(bot.spin_prizes) ? JSON.stringify(bot.spin_prizes, null, 2) : '[{"text":"حظ أوفر","weight":80},{"text":"💰 5000","weight":5}]';
       const luckBoxPrizesVal = Array.isArray(bot.luck_box_prizes) ? JSON.stringify(bot.luck_box_prizes, null, 2) : '[{"amount":0,"weight":0},{"amount":0,"weight":0},{"amount":0,"weight":0}]';
+      const webhookUrl = USE_WEBHOOK ? `https://${WEBHOOK_DOMAIN}/webhook/${encodeURIComponent(bot.bot_id)}` : null;
+      const statusBadge = isRunning ? '<span class="badge badge-green">Running</span>' : '<span class="badge badge-yellow">Stopped</span>';
+      const modeBadge = USE_WEBHOOK ? '<span class="badge badge-blue">Webhook</span>' : '<span class="badge" style="background:#1e3a2f;color:#4ade80">Polling</span>';
+      const webhookInfoHtml = webhookUrl ? `
+        <div class="card" style="border-color:#1e3a5f;padding:16px">
+          <h3 style="color:#60a5fa;margin-bottom:8px">Webhook URL</h3>
+          <div class="info-box">${esc(webhookUrl)}</div>
+          <p style="color:#64748b;font-size:.82rem">Telegram will send updates to this URL. Make sure it is publicly accessible via HTTPS.</p>
+        </div>` : '';
       res.send(layout('Edit Bot', `<div class="container">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <h1>Edit: ${esc(bot.bot_display_name || bot.bot_id)}</h1>
-          <span>${isRunning ? '<span class="badge badge-green">Running</span>' : '<span class="badge badge-yellow">Stopped</span>'}</span>
+        <nav><a href="/admin">Dashboard</a><span>/</span><span>${esc(bot.bot_display_name || bot.bot_id)}</span></nav>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h1>${esc(bot.bot_display_name || bot.bot_id)}</h1>
+          <div style="display:flex;gap:6px;align-items:center">${statusBadge} ${modeBadge}</div>
         </div>
-        <div class="card" style="margin-top:16px">
+        ${webhookInfoHtml}
+        <div class="card">
           <form method="POST" action="/admin/bots/${encodeURIComponent(bot.bot_id)}">
             ${renderBotForm(bot, true)}
+            <hr class="section-divider">
+            <h3>Spin & Games</h3>
             <label>Spin Prizes (JSON) — text and weight only</label>
             <textarea name="spin_prizes" rows="8" placeholder='[{"text":"حظ أوفر","weight":80},{"text":"💰 5000","weight":5}]'>${esc(spinPrizesVal)}</textarea>
-            <label>Luck Box Prizes (JSON) — 3 boxes: amount (LS) and weight (%). Default all 0</label>
-            <textarea name="luck_box_prizes" rows="6" placeholder='[{"amount":0,"weight":0},{"amount":0,"weight":0},{"amount":0,"weight":0}]'>${esc(luckBoxPrizesVal)}</textarea>
-            <div style="display:flex;gap:8px;margin-top:16px">
+            <label>Luck Box Prizes (JSON) — 3 boxes: amount (LS) and weight (%)</label>
+            <textarea name="luck_box_prizes" rows="5" placeholder='[{"amount":0,"weight":0},{"amount":0,"weight":0},{"amount":0,"weight":0}]'>${esc(luckBoxPrizesVal)}</textarea>
+            <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
               <button type="submit" class="btn btn-primary">Save Changes</button>
-              <a href="/admin" class="btn btn-danger">Cancel</a>
+              ${isRunning ? `<button type="submit" name="_restart" value="1" class="btn btn-secondary">Save & Restart</button>` : ''}
+              <a href="/admin" class="btn btn-secondary">Cancel</a>
             </div>
           </form>
         </div>
-        <div class="card">
-          <h2>Danger Zone</h2>
-          <form method="POST" action="/admin/bots/${encodeURIComponent(bot.bot_id)}/delete" onsubmit="return confirm('Delete this bot permanently? This cannot be undone.')">
+        <div class="card" style="border-color:#7f1d1d">
+          <h2 style="color:#f87171">Danger Zone</h2>
+          <p style="color:#94a3b8;font-size:.9rem;margin-bottom:16px">Permanently delete this bot and all its data. This cannot be undone.</p>
+          <form method="POST" action="/admin/bots/${encodeURIComponent(bot.bot_id)}/delete" onsubmit="return confirmAction('Delete bot \\'${esc(bot.bot_display_name || bot.bot_id)}\\' permanently?',this)">
             <button type="submit" class="btn btn-danger">Delete Bot</button>
           </form>
         </div>
@@ -517,11 +604,23 @@ function renderBotForm(bot, isEdit) {
           }
         }
         await updateBotRow(req.params.id, fields);
-        const instance = runningBots.get(req.params.id);
-        if (instance && typeof instance.reloadConfig === 'function') {
-          await instance.reloadConfig();
+        const shouldRestart = req.body._restart === '1';
+        if (shouldRestart) {
+          await stopBot(req.params.id);
+          const freshRow = await getBotRowById(req.params.id);
+          if (freshRow) {
+            const r = await startBot(freshRow);
+            res.setHeader('Set-Cookie', flashCookie(r.ok ? `Bot "${req.params.id}" updated and restarted` : `Bot "${req.params.id}" updated (restart failed: ${r.msg})`));
+          } else {
+            res.setHeader('Set-Cookie', flashCookie(`Bot "${req.params.id}" updated`));
+          }
+        } else {
+          const instance = runningBots.get(req.params.id);
+          if (instance && typeof instance.reloadConfig === 'function') {
+            await instance.reloadConfig();
+          }
+          res.setHeader('Set-Cookie', flashCookie(`Bot "${req.params.id}" updated`));
         }
-        res.setHeader('Set-Cookie', flashCookie(`Bot "${req.params.id}" updated`));
         res.redirect('/admin');
       } catch (err) {
         res.send(layout('Error', `<div class="container"><div class="flash flash-err">${esc(err.message)}</div><a href="/admin/bots/${encodeURIComponent(req.params.id)}">Back</a></div>`));
@@ -540,6 +639,15 @@ function renderBotForm(bot, isEdit) {
     app.post('/admin/bots/:id/stop', authMiddleware, async (req, res) => {
       await stopBot(req.params.id);
       res.setHeader('Set-Cookie', flashCookie(`Stopped ${req.params.id}`));
+      res.redirect('/admin');
+    });
+
+    app.post('/admin/bots/:id/restart', authMiddleware, async (req, res) => {
+      await stopBot(req.params.id);
+      const botRow = await getBotRowById(req.params.id);
+      if (!botRow) { res.setHeader('Set-Cookie', flashCookie('Error: Bot not found')); return res.redirect('/admin'); }
+      const result = await startBot(botRow);
+      res.setHeader('Set-Cookie', flashCookie(result.ok ? `Restarted ${req.params.id}` : `Error restarting: ${result.msg}`));
       res.redirect('/admin');
     });
 
