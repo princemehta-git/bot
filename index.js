@@ -168,6 +168,7 @@ const BOT_FIELDS = [
   { key: 'is_active', label: 'Active', type: 'checkbox' },
   { key: 'debug_mode', label: 'Debug Mode', type: 'checkbox' },
   { key: 'debug_logs', label: 'Debug Logs', type: 'checkbox' },
+  { key: 'oxapay_merchant_api_key', label: 'OxaPay Merchant API Key', type: 'password' },
 ];
 
 function renderBotForm(bot, isEdit) {
@@ -185,6 +186,7 @@ function renderBotForm(bot, isEdit) {
     { label: 'Telegram', keys: telegramKeys },
     { label: 'Ichancy API', keys: ichancyKeys },
     { label: 'Options', keys: optionKeys },
+    { label: 'OxaPay (Crypto Payments)', keys: ['oxapay_merchant_api_key'] },
   ];
 
   const fieldMap = Object.fromEntries(BOT_FIELDS.map(f => [f.key, f]));
@@ -224,6 +226,54 @@ function renderBotForm(bot, isEdit) {
     console.log('[Launcher] Database ready.');
 
     const app = express();
+
+    // ── OxaPay webhook (must be BEFORE express.json() to capture raw body for HMAC) ──
+    const { verifyWebhookSignature: verifyOxapaySignature } = require('./lib/oxapay-api');
+    app.post('/oxapay-webhook/:botId',
+      express.raw({ type: 'application/json' }),
+      async (req, res) => {
+        try {
+          const botId = req.params.botId;
+          const rawBody = req.body; // Buffer (from express.raw)
+          const hmacHeader = (req.headers['hmac'] || '').toLowerCase();
+
+          const botRow = await getBotRowById(botId);
+          if (!botRow || !botRow.oxapay_merchant_api_key) {
+            return res.status(200).send('ok');
+          }
+
+          const isValid = verifyOxapaySignature(rawBody, hmacHeader, botRow.oxapay_merchant_api_key);
+          if (!isValid) {
+            console.warn(`[OxaPay Webhook] Invalid signature for bot ${botId}`);
+            return res.status(400).send('invalid signature');
+          }
+
+          let data;
+          try { data = JSON.parse(rawBody.toString()); } catch (_) {
+            return res.status(400).send('invalid json');
+          }
+
+          const status = (data.status || data.Status || '').toLowerCase();
+          const trackId = data.track_id || data.trackId;
+          if (!trackId || status !== 'paid') {
+            return res.status(200).send('ok');
+          }
+
+          const instance = runningBots.get(botId);
+          if (instance && typeof instance.handleOxapayWebhook === 'function') {
+            instance.handleOxapayWebhook(trackId, data).catch(err =>
+              console.warn(`[OxaPay Webhook] handleOxapayWebhook error for bot ${botId}:`, err.message)
+            );
+          }
+
+          res.status(200).send('ok');
+        } catch (err) {
+          console.error('[OxaPay Webhook] Error:', err.message);
+          res.status(200).send('ok'); // always 200 to prevent OxaPay retries on our errors
+        }
+      }
+    );
+
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
     app.use(cookieParser);

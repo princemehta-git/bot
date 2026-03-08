@@ -232,3 +232,61 @@ CREATE TABLE IF NOT EXISTS shamcash_pending_withdrawals (
   KEY idx_bot_status (bot_id, status),
   KEY idx_bot_user (bot_id, telegram_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- OxaPay pending deposit invoices (created when user initiates crypto deposit).
+-- status: pending → paid (webhook/polling confirmed) | expired | cancelled
+-- track_id is unique per bot (OxaPay invoice identifier).
+CREATE TABLE IF NOT EXISTS oxapay_pending_invoices (
+  id                    INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  bot_id                VARCHAR(128) NOT NULL,
+  track_id              VARCHAR(128) NOT NULL COMMENT 'OxaPay invoice track_id',
+  telegram_user_id      BIGINT NOT NULL,
+  coin                  VARCHAR(32) NOT NULL COMMENT 'OxaPay API currency code e.g. USDT.TRC20',
+  coin_display          VARCHAR(64) NOT NULL COMMENT 'Display name e.g. USDT (TRC20)',
+  amount_usd            DECIMAL(12,4) NOT NULL COMMENT 'Requested deposit amount in USD',
+  amount_coin           DECIMAL(24,8) NOT NULL COMMENT 'Equivalent coin amount at invoice creation',
+  amount_syp_credited   DECIMAL(18,2) NULL COMMENT 'SYP credited to user on success (null until paid)',
+  status                ENUM('pending','paid','expired','cancelled') NOT NULL DEFAULT 'pending',
+  polling_count         INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Number of polling iterations done',
+  created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_bot_track (bot_id, track_id),
+  KEY idx_bot_status (bot_id, status),
+  KEY idx_bot_user (bot_id, telegram_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- OxaPay pending withdrawal requests (user requests crypto cashout; admin accepts/rejects).
+-- On accept: admin manually sends crypto. On reject: balance refunded automatically.
+CREATE TABLE IF NOT EXISTS oxapay_pending_withdrawals (
+  id                    INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  bot_id                VARCHAR(128) NOT NULL,
+  telegram_user_id      BIGINT NOT NULL,
+  amount_syp            DECIMAL(18,2) NOT NULL COMMENT 'SYP deducted from wallet',
+  amount_usd            DECIMAL(12,4) NOT NULL COMMENT 'Equivalent USD amount',
+  coin                  VARCHAR(32) NOT NULL COMMENT 'OxaPay API currency code e.g. USDT.TRC20',
+  coin_display          VARCHAR(64) NOT NULL COMMENT 'Display name e.g. USDT (TRC20)',
+  wallet_address        VARCHAR(255) NOT NULL COMMENT 'User-provided destination wallet address',
+  transaction_id        INT UNSIGNED NULL COMMENT 'FK to transactions.id (withdrawal log)',
+  status                ENUM('pending','accepted','rejected') NOT NULL DEFAULT 'pending',
+  resolved_at           DATETIME NULL,
+  resolved_by           VARCHAR(64) NULL COMMENT 'admin_accept or admin_reject',
+  created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_bot_status (bot_id, status),
+  KEY idx_bot_user (bot_id, telegram_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- New columns added to existing tables (handled automatically by Sequelize alter:true):
+--
+-- bots:
+--   oxapay_merchant_api_key  VARCHAR(255) NULL  -- per-bot OxaPay merchant API key
+--   deposit_oxapay_enabled   TINYINT(1) DEFAULT 0
+--   withdraw_oxapay_enabled  TINYINT(1) DEFAULT 0
+--
+-- payment_providers:
+--   provider_name changed from ENUM('syriatel','shamcash') to VARCHAR(64) to support 'oxapay'
+--   OxaPay uses the same min_deposit_syp / min_cashout_syp / max_cashout_syp columns as other providers.
+--   The bot converts those SYP limits to USD at runtime using the configured exchange rate.
+--
+-- transactions:
+--   method values now include 'oxapay' in addition to 'syriatel' and 'shamcash'
