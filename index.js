@@ -165,8 +165,6 @@ const BOT_FIELDS = [
   { key: 'ichancy_agent_username', label: 'Ichancy Agent Username', type: 'text' },
   { key: 'ichancy_agent_password', label: 'Ichancy Agent Password', type: 'password' },
   { key: 'ichancy_parent_id', label: 'Ichancy Parent ID', type: 'text' },
-  { key: 'ichancy_site_url', label: 'Ichancy Site URL', type: 'text' },
-  { key: 'golden_tree_url', label: 'Golden Tree URL', type: 'text' },
   { key: 'is_active', label: 'Active', type: 'checkbox' },
   { key: 'debug_mode', label: 'Debug Mode', type: 'checkbox' },
   { key: 'debug_logs', label: 'Debug Logs', type: 'checkbox' },
@@ -178,7 +176,7 @@ function renderBotForm(bot, isEdit) {
   // Group: Telegram settings
   const telegramKeys = ['channel_username', 'admin_username', 'support_username'];
   // Group: Ichancy API
-  const ichancyKeys = ['ichancy_agent_username', 'ichancy_agent_password', 'ichancy_site_url', 'ichancy_parent_id', 'golden_tree_url'];
+  const ichancyKeys = ['ichancy_agent_username', 'ichancy_agent_password', 'ichancy_parent_id'];
   // Group: Options
   const optionKeys = ['is_active', 'debug_mode', 'debug_logs'];
 
