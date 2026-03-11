@@ -276,12 +276,37 @@ CREATE TABLE IF NOT EXISTS oxapay_pending_withdrawals (
   KEY idx_bot_user (bot_id, telegram_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ── Syriatel Pending Withdrawals (smart cashout with retry/ignore) ────────
+CREATE TABLE IF NOT EXISTS syriatel_pending_withdrawals (
+  id                    INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  bot_id                VARCHAR(128) NOT NULL,
+  telegram_user_id      BIGINT NOT NULL,
+  amount_syp            DECIMAL(18,2) NOT NULL COMMENT 'Original old currency amount deducted from wallet',
+  amount_new_currency   DECIMAL(18,2) NOT NULL COMMENT 'Amount to send via API (after tax, / OLD_CURRENCY_MULTIPLE)',
+  phone                 VARCHAR(64) NOT NULL COMMENT 'Recipient Syriatel phone',
+  amount_sent           DECIMAL(18,2) NOT NULL DEFAULT 0 COMMENT 'Partial amount already transferred (new currency)',
+  status                ENUM('pending','completed','partial','failed','ignored') NOT NULL DEFAULT 'pending',
+  failure_reason        VARCHAR(64) NULL COMMENT 'low_balance, limit_hit, transfer_failed',
+  admin_message_id      VARCHAR(64) NULL COMMENT 'Admin channel message ID for editing',
+  admin_chat_id         VARCHAR(64) NULL COMMENT 'Admin channel chat ID',
+  transaction_id        INT UNSIGNED NULL COMMENT 'FK to transactions.id',
+  resolved_at           DATETIME NULL,
+  resolved_by           VARCHAR(64) NULL COMMENT 'auto_success, admin_retry, admin_ignore',
+  created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_bot_status (bot_id, status),
+  KEY idx_bot_user (bot_id, telegram_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- New columns added to existing tables (handled automatically by Sequelize alter:true):
 --
 -- bots:
---   oxapay_merchant_api_key  VARCHAR(255) NULL  -- per-bot OxaPay merchant API key
---   deposit_oxapay_enabled   TINYINT(1) DEFAULT 0
---   withdraw_oxapay_enabled  TINYINT(1) DEFAULT 0
+--   oxapay_merchant_api_key                VARCHAR(255) NULL  -- per-bot OxaPay merchant API key
+--   deposit_oxapay_enabled                 TINYINT(1) DEFAULT 0
+--   withdraw_oxapay_enabled                TINYINT(1) DEFAULT 0
+--   syriatel_low_balance_alert_enabled     TINYINT(1) DEFAULT 0  -- toggle: alert when account balance < threshold
+--   syriatel_low_balance_threshold         DECIMAL(18,2) DEFAULT 500  -- threshold in new currency
+--   syriatel_tx_fail_balance_alert_enabled TINYINT(1) DEFAULT 1  -- toggle: alert when transfer fails due to low balance
 --
 -- payment_providers:
 --   provider_name changed from ENUM('syriatel','shamcash') to VARCHAR(64) to support 'oxapay'
