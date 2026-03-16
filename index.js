@@ -9,7 +9,7 @@ const { initDb, createBotDb, getAllBots, getActiveBots, getBotRowById, createBot
 const { verifyInitData, parseAmountFromText } = require('./lib/telegram-initdata');
 const { verifySpinToken } = require('./lib/spin-token');
 const createBotInstance = require('./lib/bot-instance');
-const { createApiClient } = require('./lib/ichancy-api');
+const { createApiClient, signIn: ichancySignIn, apiRequest: ichancyApiRequest } = require('./lib/ichancy-api');
 
 // ── Admin credentials from .env ──────────────────────────────────────
 const ADMIN_USER = (process.env.ADMIN_USER || 'admin').trim();
@@ -154,67 +154,176 @@ function togglePw(btn){var inp=btn.previousElementSibling;inp.type=inp.type==='p
 
 // ── Bot form fields ──────────────────────────────────────────────────
 const BOT_FIELDS = [
-  { key: 'bot_id', label: 'Bot ID (unique identifier)', type: 'text', required: true, editDisabled: true },
+  // Identity
+  { key: 'bot_id', label: 'Bot ID', type: 'text', editDisabled: true, createHidden: true },
   { key: 'bot_token', label: 'Bot Token', type: 'text', required: true },
-  { key: 'bot_username', label: 'Bot Username', type: 'text' },
+  { key: 'bot_username', label: 'Bot Username (e.g. @mybot)', type: 'text', required: true },
   { key: 'bot_display_name', label: 'Display Name', type: 'text' },
   { key: 'username_prefix', label: 'Username Prefix (for new Ichancy accounts, e.g. Bot-)', type: 'text' },
+  // Telegram
   { key: 'channel_username', label: 'Channel Username (e.g. @channel)', type: 'text' },
-  { key: 'admin_username', label: 'Admin Username(s) (comma-separated)', type: 'text' },
-  { key: 'support_username', label: 'Support Username', type: 'text' },
+  { key: 'admin_username', label: 'Admin Username(s) (comma-separated, without @)', type: 'text' },
+  { key: 'alert_channel_accounts', label: 'Alert User Accounts Create Channel ID', type: 'text', hint: 'Must start with -100. Will be auto-prefixed if needed.' },
+  { key: 'alert_channel_transactions', label: 'Alert Transaction Channel ID', type: 'text', hint: 'Must start with -100. Will be auto-prefixed if needed.' },
+  // Ichancy API
   { key: 'ichancy_agent_username', label: 'Ichancy Agent Username', type: 'text' },
   { key: 'ichancy_agent_password', label: 'Ichancy Agent Password', type: 'password' },
   { key: 'ichancy_parent_id', label: 'Ichancy Parent ID', type: 'text' },
-  { key: 'is_active', label: 'Active', type: 'checkbox' },
+  // Support
+  { key: 'support_username', label: 'Support Telegram Username', type: 'text', editOnly: true },
+  { key: 'support_whatsapp_number', label: 'Support WhatsApp Number', type: 'text', editOnly: true },
+  { key: 'support_telegram_enabled', label: 'Support Telegram Enabled', type: 'stringCheckbox', editOnly: true },
+  { key: 'support_whatsapp_enabled', label: 'Support WhatsApp Enabled', type: 'stringCheckbox', editOnly: true },
+  // Settings
+  { key: 'exchange_rate_syp_per_usd', label: 'Exchange Rate (SYP per USD)', type: 'number', editOnly: true },
+  { key: 'timezone', label: 'Timezone', type: 'text', editOnly: true },
+  { key: 'deposit_required_ls', label: 'Minimum Deposit (LS)', type: 'number', editOnly: true },
+  { key: 'active_referrals_required', label: 'Active Referrals Required', type: 'number', editOnly: true },
+  { key: 'referral_level1_percent', label: 'Referral Level 1 %', type: 'number', editOnly: true },
+  { key: 'referral_level2_percent', label: 'Referral Level 2 %', type: 'number', editOnly: true },
+  { key: 'referral_level3_percent', label: 'Referral Level 3 %', type: 'number', editOnly: true },
+  // Payment - Syriatel
+  { key: 'syriatel_api_key', label: 'Syriatel API Key', type: 'password' },
+  { key: 'syriatel_pin', label: 'Syriatel PIN', type: 'password', editOnly: true },
+  { key: 'deposit_syriatel_enabled', label: 'Deposit Syriatel', type: 'checkbox', editOnly: true },
+  { key: 'withdraw_syriatel_enabled', label: 'Withdraw Syriatel', type: 'checkbox', editOnly: true },
+  { key: 'syriatel_low_balance_alert_enabled', label: 'Low Balance Alert', type: 'checkbox', editOnly: true },
+  { key: 'syriatel_low_balance_threshold', label: 'Low Balance Threshold', type: 'number', editOnly: true },
+  { key: 'syriatel_tx_fail_balance_alert_enabled', label: 'TX Fail Balance Alert', type: 'checkbox', editOnly: true },
+  // Payment - ShamCash
+  { key: 'sham_cash_deposit_code', label: 'ShamCash Deposit Code', type: 'text' },
+  { key: 'deposit_shamcash_enabled', label: 'Deposit ShamCash', type: 'checkbox', editOnly: true },
+  { key: 'withdraw_shamcash_enabled', label: 'Withdraw ShamCash', type: 'checkbox', editOnly: true },
+  // Payment - OxaPay
+  { key: 'oxapay_merchant_api_key', label: 'OxaPay Merchant API Key', type: 'password' },
+  { key: 'deposit_oxapay_enabled', label: 'Deposit OxaPay', type: 'checkbox', editOnly: true },
+  { key: 'withdraw_oxapay_enabled', label: 'Withdraw OxaPay', type: 'checkbox', editOnly: true },
+  // Options
+  { key: 'is_active', label: 'Active', type: 'checkbox', hint: 'When enabled, the bot process will start and respond to users. When disabled, the bot will not run at all.' },
+  { key: 'bot_off', label: 'Bot Off', type: 'checkbox', hint: 'When enabled, the bot stays running but responds with "Bot is temporarily paused" to all non-admin users. Admins can still use the bot normally.' },
   { key: 'debug_mode', label: 'Debug Mode', type: 'checkbox' },
   { key: 'debug_logs', label: 'Debug Logs', type: 'checkbox' },
-  { key: 'oxapay_merchant_api_key', label: 'OxaPay Merchant API Key', type: 'password' },
 ];
 
 function renderBotForm(bot, isEdit) {
   let html = '';
-  const identityKeys = ['bot_id', 'bot_token', 'bot_username', 'bot_display_name', 'username_prefix'];
-  // Group: Telegram settings
-  const telegramKeys = ['channel_username', 'admin_username', 'support_username'];
-  // Group: Ichancy API
-  const ichancyKeys = ['ichancy_agent_username', 'ichancy_agent_password', 'ichancy_parent_id'];
-  // Group: Options
-  const optionKeys = ['is_active', 'debug_mode', 'debug_logs'];
-
   const groups = [
-    { label: 'Identity', keys: identityKeys },
-    { label: 'Telegram', keys: telegramKeys },
-    { label: 'Ichancy API', keys: ichancyKeys },
-    { label: 'Options', keys: optionKeys },
-    { label: 'OxaPay (Crypto Payments)', keys: ['oxapay_merchant_api_key'] },
+    { label: 'Identity', keys: ['bot_id', 'bot_token', 'bot_username', 'bot_display_name', 'username_prefix'] },
+    { label: 'Telegram', keys: ['channel_username', 'admin_username', 'alert_channel_accounts', 'alert_channel_transactions'] },
+    { label: 'Ichancy API', keys: ['ichancy_agent_username', 'ichancy_agent_password', 'ichancy_parent_id'] },
+    { label: 'Support', keys: ['support_username', 'support_whatsapp_number', 'support_telegram_enabled', 'support_whatsapp_enabled'] },
+    { label: 'Settings', keys: ['exchange_rate_syp_per_usd', 'timezone', 'deposit_required_ls', 'active_referrals_required', 'referral_level1_percent', 'referral_level2_percent', 'referral_level3_percent'] },
+    { label: 'Syriatel Payment', keys: ['syriatel_api_key', 'syriatel_pin', 'deposit_syriatel_enabled', 'withdraw_syriatel_enabled', 'syriatel_low_balance_alert_enabled', 'syriatel_low_balance_threshold', 'syriatel_tx_fail_balance_alert_enabled'] },
+    { label: 'ShamCash Payment', keys: ['sham_cash_deposit_code', 'deposit_shamcash_enabled', 'withdraw_shamcash_enabled'] },
+    { label: 'OxaPay (Crypto)', keys: ['oxapay_merchant_api_key', 'deposit_oxapay_enabled', 'withdraw_oxapay_enabled'] },
+    { label: 'Options', keys: ['is_active', 'bot_off', 'debug_mode', 'debug_logs'] },
   ];
 
   const fieldMap = Object.fromEntries(BOT_FIELDS.map(f => [f.key, f]));
   let first = true;
   for (const group of groups) {
+    // Check if any field in this group is visible
+    const visibleKeys = group.keys.filter(key => {
+      const f = fieldMap[key];
+      if (!f) return false;
+      if (f.createHidden && !isEdit) return false;
+      if (f.editOnly && !isEdit) return false;
+      return true;
+    });
+    if (visibleKeys.length === 0) continue;
     if (!first) html += '<hr class="section-divider">';
     first = false;
     html += `<h3>${group.label}</h3>`;
-    for (const key of group.keys) {
+    for (const key of visibleKeys) {
       const f = fieldMap[key];
-      if (!f) continue;
       const val = bot[f.key] ?? '';
       if (f.type === 'checkbox') {
         const checked = val ? 'checked' : '';
-        html += `<label style="display:flex;align-items:center;gap:8px;margin-bottom:14px;cursor:pointer"><input type="checkbox" name="${f.key}" value="1" ${checked} style="width:auto;margin:0"> <span style="color:#e2e8f0;font-size:.95rem;font-weight:500">${esc(f.label)}</span></label>`;
+        html += `<label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;cursor:pointer"><input type="checkbox" name="${f.key}" value="1" ${checked} style="width:auto;margin:0"> <span style="color:#e2e8f0;font-size:.95rem;font-weight:500">${esc(f.label)}</span></label>`;
+        if (f.hint) html += `<p style="color:#64748b;font-size:.8rem;margin:0 0 14px 28px">${esc(f.hint)}</p>`;
+      } else if (f.type === 'stringCheckbox') {
+        const checked = String(val) === 'true' ? 'checked' : '';
+        html += `<label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;cursor:pointer"><input type="checkbox" name="${f.key}" value="1" ${checked} style="width:auto;margin:0"> <span style="color:#e2e8f0;font-size:.95rem;font-weight:500">${esc(f.label)}</span></label>`;
+        if (f.hint) html += `<p style="color:#64748b;font-size:.8rem;margin:0 0 14px 28px">${esc(f.hint)}</p>`;
       } else if (f.type === 'password') {
         const disabled = isEdit && f.editDisabled ? 'disabled' : '';
         const req = f.required && !isEdit ? 'required' : '';
         html += `<label>${esc(f.label)}</label><div class="pw-wrap"><input type="password" name="${f.key}" value="${esc(val)}" ${disabled} ${req} autocomplete="new-password"><button type="button" class="pw-toggle" onclick="togglePw(this)">Show</button></div>`;
         if (isEdit && f.editDisabled) html += `<input type="hidden" name="${f.key}" value="${esc(val)}">`;
+      } else if (f.type === 'number') {
+        html += `<label>${esc(f.label)}</label><input type="number" step="any" name="${f.key}" value="${esc(String(val))}">`;
+        if (f.hint) html += `<p style="color:#64748b;font-size:.8rem;margin:-8px 0 12px 0">${esc(f.hint)}</p>`;
       } else {
         const disabled = isEdit && f.editDisabled ? 'disabled' : '';
         const req = f.required && !isEdit ? 'required' : '';
         html += `<label>${esc(f.label)}</label><input type="${f.type}" name="${f.key}" value="${esc(val)}" ${disabled} ${req}>`;
         if (isEdit && f.editDisabled) html += `<input type="hidden" name="${f.key}" value="${esc(val)}">`;
+        if (f.hint) html += `<p style="color:#64748b;font-size:.8rem;margin:-8px 0 12px 0">${esc(f.hint)}</p>`;
+      }
+      // Add Fetch ID button after ichancy_parent_id field
+      if (key === 'ichancy_parent_id') {
+        html += `<button type="button" class="btn btn-secondary btn-sm" id="fetchParentIdBtn" onclick="fetchParentId(this)" style="margin:-4px 0 12px 0">Fetch ID</button>`;
       }
     }
   }
+
+  // Client-side JS for auto-formatting
+  html += `<script>
+(function() {
+  var usernameInput = document.querySelector('input[name="bot_username"]');
+  var displayInput = document.querySelector('input[name="bot_display_name"]');
+  if (usernameInput && displayInput) {
+    // In edit mode, mark display name as user-edited if it already has a value
+    if (displayInput.value.trim()) { displayInput.dataset.userEdited = '1'; }
+    usernameInput.addEventListener('blur', function() {
+      var val = usernameInput.value.trim();
+      if (val && !val.startsWith('@')) { usernameInput.value = '@' + val; val = '@' + val; }
+      if (!displayInput.dataset.userEdited) {
+        displayInput.value = val.replace(/^@/, '').replace(/-/g, ' ').replace(/_/g, ' ');
+      }
+    });
+    displayInput.addEventListener('input', function() { displayInput.dataset.userEdited = '1'; });
+  }
+  var channelInput = document.querySelector('input[name="channel_username"]');
+  if (channelInput) {
+    channelInput.addEventListener('blur', function() {
+      var val = channelInput.value.trim();
+      if (val && !val.startsWith('@')) { channelInput.value = '@' + val; }
+    });
+  }
+  ['alert_channel_accounts','alert_channel_transactions'].forEach(function(name) {
+    var input = document.querySelector('input[name="' + name + '"]');
+    if (input) {
+      input.addEventListener('blur', function() {
+        var val = input.value.trim();
+        if (!val) return;
+        val = val.replace(/[^0-9]/g, '');
+        if (!val) { input.value = ''; return; }
+        if (val.startsWith('100')) { input.value = '-' + val; }
+        else { input.value = '-100' + val; }
+      });
+    }
+  });
+})();
+async function fetchParentId(btn) {
+  var username = document.querySelector('input[name="ichancy_agent_username"]').value.trim();
+  var pwInput = document.querySelector('input[name="ichancy_agent_password"]');
+  var password = pwInput ? pwInput.value.trim() : '';
+  if (!username || !password) { alert('Please enter Agent Username and Password first'); return; }
+  btn.disabled = true; btn.textContent = 'Fetching...';
+  try {
+    var res = await fetch('/admin/api/fetch-parent-id', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: username, password: password })
+    });
+    var data = await res.json();
+    if (data.success) {
+      document.querySelector('input[name="ichancy_parent_id"]').value = data.parentId;
+    } else { alert('Failed: ' + (data.error || 'Unknown error')); }
+  } catch (err) { alert('Error: ' + err.message); }
+  btn.disabled = false; btn.textContent = 'Fetch ID';
+}
+</script>`;
   return html;
 }
 
@@ -412,6 +521,80 @@ function renderBotForm(bot, isEdit) {
       res.sendStatus(200);
     });
 
+    // ── Syriatel GSMS helper ──
+    const SYRIATEL_API_BASE_URL = (process.env.SYRIATEL_API_BASE_URL || 'http://31.97.205.230:3009').replace(/\/$/, '');
+    async function fetchSyriatelGsmsForBot(apiKey) {
+      if (!apiKey) return { success: false };
+      const url = `${SYRIATEL_API_BASE_URL}/gsms?apiKey=${encodeURIComponent(apiKey.trim())}`;
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data && data.success === true && Array.isArray(data.gsms)) return { success: true, gsms: data.gsms };
+        return { success: false };
+      } catch (err) {
+        console.warn('[Launcher] fetchSyriatelGsms error:', err.message);
+        return { success: false };
+      }
+    }
+
+    // ── Sanitize helpers for form data ──
+    function sanitizeChannelId(val) {
+      val = String(val || '').trim();
+      if (!val) return '';
+      // Strip everything except digits
+      val = val.replace(/[^0-9]/g, '');
+      if (!val) return '';
+      if (val.startsWith('100')) return '-' + val;
+      return '-100' + val;
+    }
+
+    function sanitizeAdminUsernames(val) {
+      return String(val || '').split(',').map(u => u.trim().replace(/^@/, '')).filter(Boolean).join(',');
+    }
+
+    function ensureAt(val) {
+      val = String(val || '').trim();
+      if (val && !val.startsWith('@')) return '@' + val;
+      return val;
+    }
+
+    // ── Fetch Ichancy Parent ID API ──
+    app.post('/admin/api/fetch-parent-id', authMiddleware, async (req, res) => {
+      try {
+        const { username, password } = req.body || {};
+        if (!username || !password) return res.json({ success: false, error: 'Username and password required' });
+        const login = await ichancySignIn(username.trim(), password.trim());
+        if (!login.success) return res.json({ success: false, error: 'Login to Ichancy failed. Check credentials.' });
+        // Try getChildren first
+        try {
+          const childrenRes = await ichancyApiRequest('Agent/getChildren', {
+            start: 0, limit: 20,
+            filter: { self: { action: '=', value: true, valueLabel: true } },
+            isNextPage: false, searchBy: { agentChildrenList: '' }
+          }, { cookies: login.cookies, referer: 'https://agents.ichancy.com/dashboard' });
+          if (childrenRes.data && childrenRes.data.status === true && childrenRes.data.result &&
+              Array.isArray(childrenRes.data.result.records) && childrenRes.data.result.records.length > 0) {
+            const affiliateId = childrenRes.data.result.records[0].affiliateId;
+            if (affiliateId) return res.json({ success: true, parentId: String(affiliateId) });
+          }
+        } catch (_) {}
+        // Fallback: getData
+        try {
+          const dataRes = await ichancyApiRequest('core/getData', {}, {
+            cookies: login.cookies, referer: 'https://agents.ichancy.com/'
+          });
+          if (dataRes.data && dataRes.data.status === true && dataRes.data.result && dataRes.data.result.app) {
+            const app = dataRes.data.result.app;
+            const parentId = (app.currentUser && app.currentUser.affiliateId) || app.currentUserId;
+            if (parentId) return res.json({ success: true, parentId: String(parentId) });
+          }
+        } catch (_) {}
+        return res.json({ success: false, error: 'Could not find parent ID from Ichancy API' });
+      } catch (err) {
+        return res.json({ success: false, error: err.message });
+      }
+    });
+
     // ── Login ──
     app.get('/admin/login', (_req, res) => {
       res.send(layout('Login', `
@@ -464,6 +647,7 @@ function renderBotForm(bot, isEdit) {
           : isRunning
             ? '<span class="badge badge-green">Running</span>'
             : '<span class="badge badge-yellow">Stopped</span>';
+        const botOffBadge = b.bot_off ? '<span class="badge" style="background:#713f12;color:#fbbf24;font-size:.7rem">Bot Off</span>' : '';
         const modeBadge = USE_WEBHOOK
           ? '<span class="badge badge-blue" style="font-size:.7rem">Webhook</span>'
           : '<span class="badge" style="background:#1e3a2f;color:#4ade80;font-size:.7rem">Polling</span>';
@@ -471,7 +655,7 @@ function renderBotForm(bot, isEdit) {
         rows += `<tr>
           <td><strong>${esc(b.bot_display_name || b.bot_id)}</strong><br><small style="color:#64748b">${esc(b.bot_id)}</small>${webhookPath}</td>
           <td style="color:#94a3b8">${esc(b.bot_username || '—')}</td>
-          <td>${statusBadge} ${modeBadge}</td>
+          <td>${statusBadge} ${botOffBadge} ${modeBadge}</td>
           <td class="actions">
             <a href="/admin/bots/${encodeURIComponent(b.bot_id)}" class="btn btn-primary btn-sm">Edit</a>
             ${b.is_active && !isRunning ? `<form method="POST" action="/admin/bots/${encodeURIComponent(b.bot_id)}/start" style="display:inline"><button class="btn btn-success btn-sm">Start</button></form>` : ''}
@@ -505,7 +689,7 @@ function renderBotForm(bot, isEdit) {
 
     // ── New bot ──
     app.get('/admin/bots/new', authMiddleware, (_req, res) => {
-      const defaults = { is_active: true, debug_logs: true, bot_display_name: 'New Bot', username_prefix: 'Bot-' };
+      const defaults = { is_active: true, debug_logs: true, bot_display_name: '', username_prefix: 'Bot-' };
       res.send(layout('Add Bot', `<div class="container">
         <nav><a href="/admin">Dashboard</a><span>/</span><span>Add Bot</span></nav>
         <h1>Add New Bot</h1>
@@ -525,14 +709,77 @@ function renderBotForm(bot, isEdit) {
       try {
         const data = {};
         for (const f of BOT_FIELDS) {
+          if (f.createHidden || f.editOnly) continue;
           if (f.type === 'checkbox') data[f.key] = req.body[f.key] === '1';
           else if (req.body[f.key] !== undefined) data[f.key] = req.body[f.key];
         }
-        if (!data.bot_id) throw new Error('Bot ID is required');
-        if (!/^[a-zA-Z0-9_\-]+$/.test(data.bot_id)) throw new Error('Bot ID must contain only letters, numbers, hyphens, or underscores');
+
+        // Auto-add @ to bot_username if missing
+        if (data.bot_username) data.bot_username = ensureAt(data.bot_username);
+        if (!data.bot_username) throw new Error('Bot Username is required');
+
+        // Derive bot_id from bot_username (without @)
+        data.bot_id = data.bot_username.replace(/^@/, '');
+        if (!/^[a-zA-Z0-9_\-]+$/.test(data.bot_id)) throw new Error('Bot Username must contain only letters, numbers, hyphens, or underscores');
+
         const existing = await getBotRowById(data.bot_id);
-        if (existing) throw new Error('Bot ID already exists');
+        if (existing) throw new Error('A bot with this username already exists');
+
+        // Auto-add @ to channel_username if missing
+        if (data.channel_username) data.channel_username = ensureAt(data.channel_username);
+
+        // Remove @ from admin usernames
+        if (data.admin_username) data.admin_username = sanitizeAdminUsernames(data.admin_username);
+
+        // Sanitize alert channel IDs (add -100 prefix if needed)
+        if (data.alert_channel_accounts) data.alert_channel_accounts = sanitizeChannelId(data.alert_channel_accounts);
+        if (data.alert_channel_transactions) data.alert_channel_transactions = sanitizeChannelId(data.alert_channel_transactions);
+
+        // Set defaults for new bot
+        data.exchange_rate_syp_per_usd = 11500;
+        data.timezone = 'Asia/Damascus';
+        data.referral_level1_percent = 5;
+        data.referral_level2_percent = 3;
+        data.referral_level3_percent = 2;
+        data.deposit_required_ls = 50000;
+        data.spin_prizes = [{"text": "حظ أوفر", "weight": 83}, {"text": "💰 50000", "weight": 1}, {"text": "💎 10000", "weight": 8}, {"text": "💲 5000", "weight": 8}];
+        data.luck_box_prizes = [{"amount": 0, "weight": 0}, {"amount": 0, "weight": 0}, {"amount": 0, "weight": 0}];
+        data.deposit_oxapay_enabled = false;
+        data.withdraw_oxapay_enabled = false;
+        data.syriatel_low_balance_alert_enabled = false;
+        data.syriatel_low_balance_threshold = 1500;
+        data.syriatel_tx_fail_balance_alert_enabled = true;
+
+        // Enable deposit/withdraw based on whether keys were entered
+        const hasSyriatelKey = !!(data.syriatel_api_key && data.syriatel_api_key.trim());
+        const hasShamcashCode = !!(data.sham_cash_deposit_code && data.sham_cash_deposit_code.trim());
+        data.deposit_syriatel_enabled = hasSyriatelKey;
+        data.withdraw_syriatel_enabled = hasSyriatelKey;
+        data.deposit_shamcash_enabled = hasShamcashCode;
+        data.withdraw_shamcash_enabled = hasShamcashCode;
+
         await createBotRow(data);
+
+        // Refresh syriatel deposit numbers via GSMS API if api key was provided
+        if (hasSyriatelKey) {
+          try {
+            const gsmsResult = await fetchSyriatelGsmsForBot(data.syriatel_api_key);
+            if (gsmsResult.success && gsmsResult.gsms && gsmsResult.gsms.length > 0) {
+              const syriatelNumbers = gsmsResult.gsms.map(g => ({
+                number: (g.secretCode != null ? String(g.secretCode).trim() : '') || String(g.gsm || '').trim(),
+                secretCode: g.secretCode != null ? String(g.secretCode).trim() : undefined,
+                gsm: String(g.gsm || '').trim(),
+                enabled: true,
+              })).filter(e => e.number);
+              await updateBotRow(data.bot_id, { syriatel_deposit_numbers: JSON.stringify(syriatelNumbers) });
+              console.log(`[Launcher] Refreshed ${syriatelNumbers.length} Syriatel number(s) for new bot ${data.bot_id}`);
+            }
+          } catch (err) {
+            console.warn(`[Launcher] Syriatel refresh for new bot ${data.bot_id}:`, err.message);
+          }
+        }
+
+        // Start bot if active
         if (data.is_active) {
           const freshRow = await getBotRowById(data.bot_id);
           if (freshRow) {
@@ -555,8 +802,14 @@ function renderBotForm(bot, isEdit) {
       const bot = await getBotRowById(req.params.id);
       if (!bot) return res.status(404).send(layout('Not Found', '<div class="container"><nav><a href="/admin">Dashboard</a></nav><h1>Bot not found</h1><a href="/admin" class="btn btn-primary">Back</a></div>'));
       const isRunning = runningBots.has(bot.bot_id);
-      const spinPrizesVal = Array.isArray(bot.spin_prizes) ? JSON.stringify(bot.spin_prizes, null, 2) : '[{"text":"حظ أوفر","weight":80},{"text":"💰 5000","weight":5}]';
+      const spinPrizesVal = Array.isArray(bot.spin_prizes) ? JSON.stringify(bot.spin_prizes, null, 2) : '[{"text":"حظ أوفر","weight":83},{"text":"💰 50000","weight":1},{"text":"💎 10000","weight":8},{"text":"💲 5000","weight":8}]';
       const luckBoxPrizesVal = Array.isArray(bot.luck_box_prizes) ? JSON.stringify(bot.luck_box_prizes, null, 2) : '[{"amount":0,"weight":0},{"amount":0,"weight":0},{"amount":0,"weight":0}]';
+      let syriatelNumbersVal = '';
+      if (bot.syriatel_deposit_numbers) {
+        try { syriatelNumbersVal = JSON.stringify(JSON.parse(bot.syriatel_deposit_numbers), null, 2); }
+        catch { syriatelNumbersVal = String(bot.syriatel_deposit_numbers); }
+      }
+      const blockedUsersVal = Array.isArray(bot.blocked_users) && bot.blocked_users.length > 0 ? JSON.stringify(bot.blocked_users, null, 2) : '';
       const webhookUrl = USE_WEBHOOK ? `https://${WEBHOOK_DOMAIN}/webhook/${encodeURIComponent(bot.bot_id)}` : null;
       const statusBadge = isRunning ? '<span class="badge badge-green">Running</span>' : '<span class="badge badge-yellow">Stopped</span>';
       const modeBadge = USE_WEBHOOK ? '<span class="badge badge-blue">Webhook</span>' : '<span class="badge" style="background:#1e3a2f;color:#4ade80">Polling</span>';
@@ -579,9 +832,15 @@ function renderBotForm(bot, isEdit) {
             <hr class="section-divider">
             <h3>Spin & Games</h3>
             <label>Spin Prizes (JSON) — text and weight only</label>
-            <textarea name="spin_prizes" rows="8" placeholder='[{"text":"حظ أوفر","weight":80},{"text":"💰 5000","weight":5}]'>${esc(spinPrizesVal)}</textarea>
+            <textarea name="spin_prizes" rows="8" placeholder='[{"text":"حظ أوفر","weight":83},{"text":"💰 50000","weight":1}]'>${esc(spinPrizesVal)}</textarea>
             <label>Luck Box Prizes (JSON) — 3 boxes: amount (LS) and weight (%)</label>
             <textarea name="luck_box_prizes" rows="5" placeholder='[{"amount":0,"weight":0},{"amount":0,"weight":0},{"amount":0,"weight":0}]'>${esc(luckBoxPrizesVal)}</textarea>
+            <hr class="section-divider">
+            <h3>Data (JSON)</h3>
+            <label>Syriatel Deposit Numbers (JSON) — auto-fetched from GSMS</label>
+            <textarea name="syriatel_deposit_numbers" rows="6" placeholder='[{"number":"...","gsm":"...","enabled":true}]'>${esc(syriatelNumbersVal)}</textarea>
+            <label>Blocked Users (JSON array of Telegram user IDs)</label>
+            <textarea name="blocked_users" rows="4" placeholder='[123456789, 987654321]'>${esc(blockedUsersVal)}</textarea>
             <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
               <button type="submit" class="btn btn-primary">Save Changes</button>
               ${isRunning ? `<button type="submit" name="_restart" value="1" class="btn btn-secondary">Save & Restart</button>` : ''}
@@ -604,8 +863,55 @@ function renderBotForm(bot, isEdit) {
         const fields = {};
         for (const f of BOT_FIELDS) {
           if (f.editDisabled) continue;
-          if (f.type === 'checkbox') fields[f.key] = req.body[f.key] === '1';
-          else if (req.body[f.key] !== undefined) fields[f.key] = req.body[f.key];
+          if (f.type === 'checkbox') {
+            fields[f.key] = req.body[f.key] === '1';
+          } else if (f.type === 'stringCheckbox') {
+            fields[f.key] = req.body[f.key] === '1' ? 'true' : 'false';
+          } else if (f.type === 'number') {
+            if (req.body[f.key] !== undefined && req.body[f.key] !== '') {
+              const num = Number(req.body[f.key]);
+              if (Number.isFinite(num)) fields[f.key] = num;
+            }
+          } else if (req.body[f.key] !== undefined) {
+            fields[f.key] = req.body[f.key];
+          }
+        }
+        // Sanitize fields
+        if (fields.bot_username) fields.bot_username = ensureAt(fields.bot_username);
+        if (fields.channel_username) fields.channel_username = ensureAt(fields.channel_username);
+        if (fields.admin_username) fields.admin_username = sanitizeAdminUsernames(fields.admin_username);
+        if (fields.alert_channel_accounts) fields.alert_channel_accounts = sanitizeChannelId(fields.alert_channel_accounts);
+        if (fields.alert_channel_transactions) fields.alert_channel_transactions = sanitizeChannelId(fields.alert_channel_transactions);
+        if (fields.support_username) fields.support_username = fields.support_username.trim().replace(/^@/, '');
+        // Parse syriatel_deposit_numbers JSON
+        if (req.body.syriatel_deposit_numbers !== undefined) {
+          const raw = req.body.syriatel_deposit_numbers.trim();
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (!Array.isArray(parsed)) throw new Error('Must be array');
+              fields.syriatel_deposit_numbers = JSON.stringify(parsed);
+            } catch (e) {
+              throw new Error('Invalid Syriatel deposit numbers JSON: ' + (e.message || 'parse error'));
+            }
+          } else {
+            fields.syriatel_deposit_numbers = null;
+          }
+        }
+        // Parse blocked_users JSON
+        if (req.body.blocked_users !== undefined) {
+          const raw = req.body.blocked_users.trim();
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (!Array.isArray(parsed)) throw new Error('Must be array');
+              fields.blocked_users = parsed;
+            } catch (e) {
+              throw new Error('Invalid blocked users JSON: ' + (e.message || 'parse error'));
+            }
+          } else {
+            fields.blocked_users = [];
+          }
         }
         if (req.body.spin_prizes !== undefined) {
           const raw = req.body.spin_prizes.trim();
