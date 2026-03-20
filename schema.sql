@@ -310,6 +310,8 @@ CREATE TABLE IF NOT EXISTS syriatel_pending_withdrawals (
 --   syriatel_low_balance_alert_enabled     TINYINT(1) DEFAULT 0  -- toggle: alert when account balance < threshold
 --   syriatel_low_balance_threshold         DECIMAL(18,2) DEFAULT 500  -- threshold in new currency
 --   syriatel_tx_fail_balance_alert_enabled TINYINT(1) DEFAULT 1  -- toggle: alert when transfer fails due to low balance
+--   ichancy_low_balance_alert_enabled     TINYINT(1) DEFAULT 1  -- toggle: alert when iChancy agent wallet balance < threshold
+--   ichancy_low_balance_threshold         DECIMAL(18,2) DEFAULT 20000  -- threshold in ل.س (NSP)
 --
 -- payment_providers:
 --   provider_name changed from ENUM('syriatel','shamcash') to VARCHAR(64) to support 'oxapay'

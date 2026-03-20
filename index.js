@@ -190,6 +190,9 @@ const BOT_FIELDS = [
   { key: 'syriatel_low_balance_alert_enabled', label: 'Low Balance Alert', type: 'checkbox', editOnly: true },
   { key: 'syriatel_low_balance_threshold', label: 'Low Balance Threshold', type: 'number', editOnly: true },
   { key: 'syriatel_tx_fail_balance_alert_enabled', label: 'TX Fail Balance Alert', type: 'checkbox', editOnly: true },
+  // iChancy Alert
+  { key: 'ichancy_low_balance_alert_enabled', label: 'iChancy Low Balance Alert', type: 'checkbox', editOnly: true },
+  { key: 'ichancy_low_balance_threshold', label: 'iChancy Low Balance Threshold', type: 'number', editOnly: true },
   // Payment - ShamCash
   { key: 'sham_cash_deposit_code', label: 'ShamCash Deposit Code', type: 'text' },
   { key: 'deposit_shamcash_enabled', label: 'Deposit ShamCash', type: 'checkbox', editOnly: true },
@@ -749,6 +752,8 @@ async function fetchParentId(btn) {
         data.syriatel_low_balance_alert_enabled = false;
         data.syriatel_low_balance_threshold = 1500;
         data.syriatel_tx_fail_balance_alert_enabled = true;
+        data.ichancy_low_balance_alert_enabled = true;
+        data.ichancy_low_balance_threshold = 20000;
 
         // Enable deposit/withdraw based on whether keys were entered
         const hasSyriatelKey = !!(data.syriatel_api_key && data.syriatel_api_key.trim());
