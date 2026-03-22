@@ -963,6 +963,27 @@ async function fetchParentId(btn) {
           }
         }
         await updateBotRow(req.params.id, fields);
+
+        // Auto-fetch Syriatel deposit numbers if null in DB and bot has an API key
+        try {
+          const row = await getBotRowById(req.params.id);
+          if (row && row.syriatel_api_key && row.syriatel_api_key.trim() && !row.syriatel_deposit_numbers) {
+            const gsmsResult = await fetchSyriatelGsmsForBot(row.syriatel_api_key);
+            if (gsmsResult.success && gsmsResult.gsms && gsmsResult.gsms.length > 0) {
+              const syriatelNumbers = gsmsResult.gsms.map(g => ({
+                number: (g.secretCode != null ? String(g.secretCode).trim() : '') || String(g.gsm || '').trim(),
+                secretCode: g.secretCode != null ? String(g.secretCode).trim() : undefined,
+                gsm: String(g.gsm || '').trim(),
+                enabled: true,
+              })).filter(e => e.number);
+              await updateBotRow(req.params.id, { syriatel_deposit_numbers: JSON.stringify(syriatelNumbers) });
+              console.log(`[Admin] Auto-fetched ${syriatelNumbers.length} Syriatel number(s) for bot ${req.params.id}`);
+            }
+          }
+        } catch (err) {
+          console.warn(`[Admin] Syriatel auto-fetch for bot ${req.params.id}:`, err.message);
+        }
+
         const shouldRestart = req.body._restart === '1';
         if (shouldRestart) {
           await stopBot(req.params.id);
