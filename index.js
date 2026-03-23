@@ -197,6 +197,8 @@ const BOT_FIELDS = [
   { key: 'sham_cash_deposit_code', label: 'ShamCash Deposit Code', type: 'text' },
   { key: 'deposit_shamcash_enabled', label: 'Deposit ShamCash', type: 'checkbox', editOnly: true },
   { key: 'withdraw_shamcash_enabled', label: 'Withdraw ShamCash', type: 'checkbox', editOnly: true },
+  { key: 'semi_shamcash_automatic', label: 'Semi-Automatic ShamCash', type: 'checkbox', editOnly: true },
+  { key: 'is_hide_shamcash_identity', label: 'Hide ShamCash Identity', type: 'checkbox', editOnly: true },
   // Payment - OxaPay
   { key: 'oxapay_merchant_api_key', label: 'OxaPay Merchant API Key', type: 'password' },
   { key: 'deposit_oxapay_enabled', label: 'Deposit OxaPay', type: 'checkbox', editOnly: true },
@@ -217,7 +219,7 @@ function renderBotForm(bot, isEdit) {
     { label: 'Support', keys: ['support_username', 'support_whatsapp_number', 'support_telegram_enabled', 'support_whatsapp_enabled'] },
     { label: 'Settings', keys: ['exchange_rate_syp_per_usd', 'timezone', 'deposit_required_ls', 'active_referrals_required', 'referral_level1_percent', 'referral_level2_percent', 'referral_level3_percent'] },
     { label: 'Syriatel Payment', keys: ['syriatel_api_key', 'syriatel_pin', 'deposit_syriatel_enabled', 'withdraw_syriatel_enabled', 'syriatel_low_balance_alert_enabled', 'syriatel_low_balance_threshold', 'syriatel_tx_fail_balance_alert_enabled'] },
-    { label: 'ShamCash Payment', keys: ['sham_cash_deposit_code', 'deposit_shamcash_enabled', 'withdraw_shamcash_enabled'] },
+    { label: 'ShamCash Payment', keys: ['sham_cash_deposit_code', 'deposit_shamcash_enabled', 'withdraw_shamcash_enabled', 'semi_shamcash_automatic', 'is_hide_shamcash_identity'] },
     { label: 'OxaPay (Crypto)', keys: ['oxapay_merchant_api_key', 'deposit_oxapay_enabled', 'withdraw_oxapay_enabled'] },
     { label: 'Options', keys: ['is_active', 'bot_off', 'debug_mode', 'debug_logs'] },
   ];
