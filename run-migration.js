@@ -103,7 +103,11 @@ async function run() {
 
   const statements = sql
     .split(';\n')
-    .map(s => s.trim())
+    .map(s => {
+      // Remove leading comment lines from each chunk so we don't
+      // accidentally discard an INSERT that follows a comment block.
+      return s.replace(/^(\s*--.*\n)*/g, '').trim();
+    })
     .filter(s => s.length > 0 && !s.startsWith('--'));
 
   // Separate SET statements from data statements
