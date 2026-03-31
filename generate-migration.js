@@ -41,6 +41,7 @@ function sheet(name) {
 const rawUsers = sheet('user_accounts');
 const referrals = sheet('referral_relationships');
 const txLogs = sheet('transaction_logs');
+const referralEarnings = sheet('referral_earnings');
 
 // ── Load Ichancy player ID map from JSON files ──────────────────────────────
 
@@ -231,6 +232,150 @@ for (let i = 0; i < mappedTx.length; i += TX_BATCH) {
   lines.push('');
 }
 
+// ── 3. REFERRAL NET DETAILS (pending referral earnings) ─────────────────────
+
+// Build custom_referral_percent map from user_accounts
+const customPctMap = {};
+for (const u of rawUsers) {
+  if (u.custom_referral_percent && u.custom_referral_percent > 0) {
+    customPctMap[String(u.user_id)] = u.custom_referral_percent;
+  }
+}
+
+// Default referral percents: L1=5, L2=3, L3=2
+const DEFAULT_PCTS = [5, 3, 2];
+
+function getPercent(referrerId, level) {
+  if (level === 1 && customPctMap[referrerId]) return customPctMap[referrerId];
+  return DEFAULT_PCTS[level - 1];
+}
+
+const pendingEarnings = referralEarnings.filter(r => r.status === 'pending');
+const distributedEarnings = referralEarnings.filter(r => r.status === 'distributed');
+
+// Aggregate pending per (referrer, invited, level) → compute net_balance
+const pendingAgg = {};
+for (const r of pendingEarnings) {
+  const key = `${r.referrer_id}|${r.invited_id}|${r.level}`;
+  if (!pendingAgg[key]) pendingAgg[key] = { referrer_id: String(r.referrer_id), invited_id: String(r.invited_id), level: r.level, totalCommission: 0 };
+  pendingAgg[key].totalCommission += r.amount;
+}
+
+const netDetails = Object.values(pendingAgg).map(r => {
+  const pct = getPercent(r.referrer_id, r.level);
+  r.net_balance = Math.round(r.totalCommission * 100 / pct * 100) / 100;
+  return r;
+});
+
+console.log(`Referral net details: ${netDetails.length} rows (from ${pendingEarnings.length} pending earnings)`);
+
+lines.push('-- ============================================================');
+lines.push(`-- 3. REFERRAL NET DETAILS (${netDetails.length} rows from pending earnings)`);
+lines.push('-- ============================================================');
+lines.push('');
+
+const NET_DETAIL_BATCH = 200;
+for (let i = 0; i < netDetails.length; i += NET_DETAIL_BATCH) {
+  const batch = netDetails.slice(i, i + NET_DETAIL_BATCH);
+  lines.push('INSERT IGNORE INTO `referral_net_details` (`bot_id`, `referrer_id`, `referred_user_id`, `level`, `net_balance`) VALUES');
+  const values = batch.map(r =>
+    `(${esc(BOT_ID)}, ${r.referrer_id}, ${r.invited_id}, ${r.level}, ${r.net_balance.toFixed(2)})`
+  );
+  lines.push(values.join(',\n') + ';');
+  lines.push('');
+}
+
+// ── 4. UPDATE USERS referral_net_l1/l2/l3 (aggregate pending net balances) ──
+
+const userNets = {};
+for (const r of netDetails) {
+  if (!userNets[r.referrer_id]) userNets[r.referrer_id] = { l1: 0, l2: 0, l3: 0 };
+  userNets[r.referrer_id][`l${r.level}`] += r.net_balance;
+}
+
+// Round aggregates
+for (const uid of Object.keys(userNets)) {
+  userNets[uid].l1 = Math.round(userNets[uid].l1 * 100) / 100;
+  userNets[uid].l2 = Math.round(userNets[uid].l2 * 100) / 100;
+  userNets[uid].l3 = Math.round(userNets[uid].l3 * 100) / 100;
+}
+
+const userNetUpdates = Object.entries(userNets);
+console.log(`User referral_net updates: ${userNetUpdates.length} users`);
+
+lines.push('-- ============================================================');
+lines.push(`-- 4. USER REFERRAL NET UPDATES (${userNetUpdates.length} users)`);
+lines.push('-- ============================================================');
+lines.push('');
+
+for (const [uid, nets] of userNetUpdates) {
+  lines.push(`UPDATE \`users\` SET \`referral_net_l1\` = ${nets.l1.toFixed(2)}, \`referral_net_l2\` = ${nets.l2.toFixed(2)}, \`referral_net_l3\` = ${nets.l3.toFixed(2)} WHERE \`bot_id\` = ${esc(BOT_ID)} AND \`telegram_user_id\` = ${uid};`);
+}
+lines.push('');
+
+// ── 5. REFERRAL DISTRIBUTIONS (distributed history) ─────────────────────────
+
+// Group distributed entries by (referrer_id, distributed_at)
+const distGroups = {};
+for (const r of distributedEarnings) {
+  const key = `${r.referrer_id}|${r.distributed_at}`;
+  if (!distGroups[key]) distGroups[key] = { referrer_id: String(r.referrer_id), distributed_at: r.distributed_at, total: 0, details: [] };
+  distGroups[key].total += r.amount;
+  distGroups[key].details.push({ referred_user_id: String(r.invited_id), level: r.level, amount: r.amount });
+}
+
+const distRecords = Object.values(distGroups);
+
+// Build details_json: aggregate per (invited, level) and compute net_balance snapshot
+for (const rec of distRecords) {
+  const agg = {};
+  for (const d of rec.details) {
+    const key = `${d.referred_user_id}|${d.level}`;
+    if (!agg[key]) agg[key] = { referred_user_id: d.referred_user_id, level: d.level, totalCommission: 0 };
+    agg[key].totalCommission += d.amount;
+  }
+  const detailRows = Object.values(agg).map(d => {
+    const pct = getPercent(rec.referrer_id, d.level);
+    return { referred_user_id: Number(d.referred_user_id), level: d.level, net_balance: Math.round(d.totalCommission * 100 / pct * 100) / 100 };
+  });
+  rec.details_json = detailRows;
+
+  // Compute net_lN_snapshots
+  rec.net_l1 = 0; rec.net_l2 = 0; rec.net_l3 = 0;
+  for (const d of detailRows) {
+    rec[`net_l${d.level}`] += d.net_balance;
+  }
+  rec.net_l1 = Math.round(rec.net_l1 * 100) / 100;
+  rec.net_l2 = Math.round(rec.net_l2 * 100) / 100;
+  rec.net_l3 = Math.round(rec.net_l3 * 100) / 100;
+  rec.total = Math.round(rec.total * 100) / 100;
+}
+
+console.log(`Referral distributions: ${distRecords.length} records (from ${distributedEarnings.length} distributed earnings)`);
+
+lines.push('-- ============================================================');
+lines.push(`-- 5. REFERRAL DISTRIBUTIONS (${distRecords.length} rows)`);
+lines.push('-- ============================================================');
+lines.push('');
+
+function escDatetime(isoStr) {
+  if (!isoStr) return 'NOW()';
+  const d = new Date(isoStr);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `'${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}'`;
+}
+
+const DIST_BATCH = 50;
+for (let i = 0; i < distRecords.length; i += DIST_BATCH) {
+  const batch = distRecords.slice(i, i + DIST_BATCH);
+  lines.push('INSERT INTO `referral_distributions` (`bot_id`, `referrer_id`, `commission_amount`, `net_l1_snapshot`, `net_l2_snapshot`, `net_l3_snapshot`, `details_json`, `distributed_at`) VALUES');
+  const values = batch.map(r =>
+    `(${esc(BOT_ID)}, ${r.referrer_id}, ${r.total.toFixed(2)}, ${r.net_l1.toFixed(2)}, ${r.net_l2.toFixed(2)}, ${r.net_l3.toFixed(2)}, ${esc(JSON.stringify(r.details_json))}, ${escDatetime(r.distributed_at)})`
+  );
+  lines.push(values.join(',\n') + ';');
+  lines.push('');
+}
+
 // ── Footer ───────────────────────────────────────────────────────────────────
 
 lines.push('');
@@ -241,6 +386,9 @@ lines.push('-- Migration complete.');
 lines.push(`-- Users inserted: ${users.length}`);
 lines.push(`-- Transactions inserted: ${mappedTx.length}`);
 lines.push(`-- Referral relationships set via referred_by: ${Object.keys(referralMap).length}`);
+lines.push(`-- Referral net details: ${netDetails.length}`);
+lines.push(`-- User referral_net updates: ${userNetUpdates.length}`);
+lines.push(`-- Referral distributions: ${distRecords.length}`);
 lines.push('-- ============================================================');
 
 // ── Write file ───────────────────────────────────────────────────────────────
