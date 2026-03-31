@@ -19,6 +19,7 @@ const DB_PASSWORD = process.env.DB_PASSWORD || '';
 const DB_NAME = process.env.DB_NAME || 'ichancy_bot';
 const SQL_FILE = 'migration.sql';
 const DRY_RUN = process.argv.includes('--dry-run');
+const USERS_ONLY = process.argv.includes('--users-only');
 
 function ask(question) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -162,15 +163,19 @@ async function run() {
     console.log(`\n  Users total: ${usersInserted} inserted, ${usersSkipped} skipped\n`);
 
     // Insert transactions
-    for (let i = 0; i < txBatches.length; i++) {
-      const stmt = txBatches[i].endsWith(';') ? txBatches[i].slice(0, -1) : txBatches[i];
-      const [result] = await conn.query(stmt);
-      const rows = result.affectedRows || 0;
-      txInserted += rows;
-      console.log(`  [Transactions ${i + 1}/${txBatches.length}] ${rows} inserted`);
-    }
+    if (USERS_ONLY) {
+      console.log('  Skipping transactions (--users-only mode)\n');
+    } else {
+      for (let i = 0; i < txBatches.length; i++) {
+        const stmt = txBatches[i].endsWith(';') ? txBatches[i].slice(0, -1) : txBatches[i];
+        const [result] = await conn.query(stmt);
+        const rows = result.affectedRows || 0;
+        txInserted += rows;
+        console.log(`  [Transactions ${i + 1}/${txBatches.length}] ${rows} inserted`);
+      }
 
-    console.log(`\n  Transactions total: ${txInserted} inserted`);
+      console.log(`\n  Transactions total: ${txInserted} inserted`);
+    }
 
     // ── Verify counts before committing ────────────────────────────────────
 
