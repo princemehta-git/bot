@@ -182,6 +182,7 @@ CREATE TABLE IF NOT EXISTS payment_providers (
   deposit_bonus_percent FLOAT NOT NULL DEFAULT 0 COMMENT 'Deposit bonus rate 0-100',
   min_deposit_usd     FLOAT NULL DEFAULT NULL COMMENT 'Direct USD min deposit (shamcash only)',
   max_cashout_usd     FLOAT NULL DEFAULT NULL COMMENT 'Direct USD max withdrawal (shamcash only)',
+  min_cashout_usd     FLOAT NULL DEFAULT NULL COMMENT 'Direct USD min withdrawal (shamcash only)',
   created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
