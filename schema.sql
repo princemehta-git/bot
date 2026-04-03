@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS gift_codes (
   max_redemptions   INT UNSIGNED NULL,
   is_active         TINYINT(1) NOT NULL DEFAULT 1,
   published         TINYINT(1) NOT NULL DEFAULT 0,
+  publish_batch_id  INT UNSIGNED NULL COMMENT 'Batch ID grouping codes published together; user can only redeem one per batch',
   created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
