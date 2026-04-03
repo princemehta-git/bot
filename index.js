@@ -208,6 +208,7 @@ const BOT_FIELDS = [
   { key: 'bot_off', label: 'Bot Off', type: 'checkbox', hint: 'When enabled, the bot stays running but responds with "Bot is temporarily paused" to all non-admin users. Admins can still use the bot normally.' },
   { key: 'debug_mode', label: 'Debug Mode', type: 'checkbox' },
   { key: 'debug_logs', label: 'Debug Logs', type: 'checkbox' },
+  { key: 'send_balance_enabled', label: 'Send Balance (إهداء رصيد)', type: 'checkbox' },
 ];
 
 function renderBotForm(bot, isEdit) {
@@ -221,7 +222,7 @@ function renderBotForm(bot, isEdit) {
     { label: 'Syriatel Payment', keys: ['syriatel_api_key', 'syriatel_pin', 'deposit_syriatel_enabled', 'withdraw_syriatel_enabled', 'syriatel_low_balance_alert_enabled', 'syriatel_low_balance_threshold', 'syriatel_tx_fail_balance_alert_enabled'] },
     { label: 'ShamCash Payment', keys: ['sham_cash_deposit_code', 'deposit_shamcash_enabled', 'withdraw_shamcash_enabled', 'semi_shamcash_automatic', 'is_hide_shamcash_identity'] },
     { label: 'OxaPay (Crypto)', keys: ['oxapay_merchant_api_key', 'deposit_oxapay_enabled', 'withdraw_oxapay_enabled'] },
-    { label: 'Options', keys: ['is_active', 'bot_off', 'debug_mode', 'debug_logs'] },
+    { label: 'Options', keys: ['is_active', 'bot_off', 'debug_mode', 'debug_logs', 'send_balance_enabled'] },
   ];
 
   const fieldMap = Object.fromEntries(BOT_FIELDS.map(f => [f.key, f]));
@@ -756,6 +757,7 @@ async function fetchParentId(btn) {
         data.syriatel_tx_fail_balance_alert_enabled = true;
         data.ichancy_low_balance_alert_enabled = true;
         data.ichancy_low_balance_threshold = 20000;
+        data.send_balance_enabled = false;
 
         // Enable deposit/withdraw based on whether keys were entered
         const hasSyriatelKey = !!(data.syriatel_api_key && data.syriatel_api_key.trim());
