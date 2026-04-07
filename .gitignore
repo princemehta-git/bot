@@ -1,3 +1,4 @@
 node_modules/
 .env
 *.log
+qr_*.png
