@@ -748,7 +748,7 @@ async function fetchParentId(btn) {
         data.referral_level2_percent = 3;
         data.referral_level3_percent = 2;
         data.deposit_required_ls = 50000;
-        data.spin_prizes = [{"text": "حظ أوفر", "weight": 83}, {"text": "💰 50000", "weight": 1}, {"text": "💎 10000", "weight": 8}, {"text": "💲 5000", "weight": 8}];
+        data.spin_prizes = [{"text": "حظ أوفر", "weight": 83}, {"text": "💰 50000", "weight": 1}, {"text": "💎 10000", "weight": 8}, {"text": "🤑 5000", "weight": 8}];
         data.luck_box_prizes = [{"amount": 0, "weight": 0}, {"amount": 0, "weight": 0}, {"amount": 0, "weight": 0}];
         data.deposit_oxapay_enabled = false;
         data.withdraw_oxapay_enabled = false;
@@ -811,7 +811,7 @@ async function fetchParentId(btn) {
       const bot = await getBotRowById(req.params.id);
       if (!bot) return res.status(404).send(layout('Not Found', '<div class="container"><nav><a href="/admin">Dashboard</a></nav><h1>Bot not found</h1><a href="/admin" class="btn btn-primary">Back</a></div>'));
       const isRunning = runningBots.has(bot.bot_id);
-      const spinPrizesVal = Array.isArray(bot.spin_prizes) ? JSON.stringify(bot.spin_prizes, null, 2) : '[{"text":"حظ أوفر","weight":83},{"text":"💰 50000","weight":1},{"text":"💎 10000","weight":8},{"text":"💲 5000","weight":8}]';
+      const spinPrizesVal = Array.isArray(bot.spin_prizes) ? JSON.stringify(bot.spin_prizes, null, 2) : '[{"text":"حظ أوفر","weight":83},{"text":"💰 50000","weight":1},{"text":"💎 10000","weight":8},{"text":"🤑 5000","weight":8}]';
       const luckBoxPrizesVal = Array.isArray(bot.luck_box_prizes) ? JSON.stringify(bot.luck_box_prizes, null, 2) : '[{"amount":0,"weight":0},{"amount":0,"weight":0},{"amount":0,"weight":0}]';
       let syriatelNumbersVal = '';
       if (bot.syriatel_deposit_numbers) {
