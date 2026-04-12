@@ -685,29 +685,29 @@ async function fetchParentId(btn) {
           <div class="stat-card"><div class="stat-num" style="color:#4ade80">${runningCount}</div><div class="stat-lbl">Running</div></div>
           <div class="stat-card"><div class="stat-num" style="color:#60a5fa">${activeCount}</div><div class="stat-lbl">Active</div></div>
         </div>
+        <div id="searchBar" style="position:sticky;top:0;z-index:100;background:#0f172a;padding:14px 0 10px;border-bottom:1px solid #1e293b;margin-bottom:16px;backdrop-filter:blur(12px)">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div style="flex:1;position:relative">
+              <input type="text" id="botSearch" placeholder="Search by Bot ID, Name, Username, Support..." style="width:100%;padding:10px 14px 10px 38px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.95rem;outline:none;transition:border-color .2s,box-shadow .2s" onfocus="this.style.borderColor='#3b82f6';this.style.boxShadow='0 0 0 3px rgba(59,130,246,.15)'" onblur="this.style.borderColor='#334155';this.style.boxShadow='none'">
+              <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;fill:none;stroke:#64748b;stroke-width:2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            </div>
+            <select id="filterStatus" style="padding:10px 14px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.9rem;cursor:pointer;outline:none;min-width:130px;transition:border-color .2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#334155'">
+              <option value="all">All Status</option>
+              <option value="running">Running</option>
+              <option value="stopped">Stopped</option>
+              <option value="inactive">Inactive</option>
+            </select>
+            <select id="filterBotOff" style="padding:10px 14px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.9rem;cursor:pointer;outline:none;min-width:130px;transition:border-color .2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#334155'">
+              <option value="all">Bot Off: All</option>
+              <option value="1">Bot Off: Yes</option>
+              <option value="0">Bot Off: No</option>
+            </select>
+            <button id="clearBtn" onclick="document.getElementById('botSearch').value='';document.getElementById('filterStatus').value='all';document.getElementById('filterBotOff').value='all';filterBots()" style="padding:10px 16px;background:#334155;border:1px solid #475569;color:#94a3b8;border-radius:8px;font-size:.9rem;cursor:pointer;white-space:nowrap;transition:background .2s,color .2s;display:none" onmouseover="this.style.background='#475569';this.style.color='#e2e8f0'" onmouseout="this.style.background='#334155';this.style.color='#94a3b8'">&#x2715; Clear</button>
+          </div>
+          <div id="searchResults" style="margin-top:6px;font-size:.82rem;color:#64748b;min-height:18px"></div>
+        </div>
         <div class="card">
           <h2>All Bots</h2>
-          <div style="margin-bottom:16px">
-            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-              <div style="flex:1;min-width:220px;position:relative">
-                <input type="text" id="botSearch" placeholder="Search by Bot ID, Name, Username, Support..." style="width:100%;padding:10px 14px 10px 36px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.95rem;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#334155'">
-                <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;fill:none;stroke:#64748b;stroke-width:2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              </div>
-              <select id="filterStatus" style="padding:10px 14px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.9rem;cursor:pointer;outline:none">
-                <option value="all">All Status</option>
-                <option value="running">Running</option>
-                <option value="stopped">Stopped</option>
-                <option value="inactive">Inactive</option>
-              </select>
-              <select id="filterBotOff" style="padding:10px 14px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.9rem;cursor:pointer;outline:none">
-                <option value="all">Bot Off: All</option>
-                <option value="1">Bot Off: Yes</option>
-                <option value="0">Bot Off: No</option>
-              </select>
-              <button onclick="document.getElementById('botSearch').value='';document.getElementById('filterStatus').value='all';document.getElementById('filterBotOff').value='all';filterBots()" style="padding:10px 14px;background:#334155;border:1px solid #475569;color:#94a3b8;border-radius:8px;font-size:.9rem;cursor:pointer;white-space:nowrap">Clear Filters</button>
-            </div>
-            <div id="searchResults" style="margin-top:8px;font-size:.85rem;color:#64748b"></div>
-          </div>
           <table><thead><tr><th>Bot</th><th>Username</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody id="botTableBody">${rows || '<tr><td colspan="4" style="text-align:center;color:#64748b;padding:32px">No bots yet. Click "+ Add Bot" to create one.</td></tr>'}</tbody></table>
         </div>
@@ -729,9 +729,11 @@ async function fetchParentId(btn) {
             r.style.display=match?'':'none';
             if(match)shown++;
           });
+          var hasFilter=q||sf!=='all'||bf!=='all';
           var info=document.getElementById('searchResults');
-          if(q||sf!=='all'||bf!=='all'){
-            info.textContent='Showing '+shown+' of '+total+' bots';
+          document.getElementById('clearBtn').style.display=hasFilter?'inline-block':'none';
+          if(hasFilter){
+            info.textContent='Showing '+shown+' of '+total+' bot'+(total!==1?'s':'')+(shown===0?' — try a different search':'');
           }else{
             info.textContent='';
           }
