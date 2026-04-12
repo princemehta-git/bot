@@ -144,6 +144,31 @@ tr:last-child td{border-bottom:none}
 .info-box{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:.85rem;color:#94a3b8;margin-bottom:12px;word-break:break-all}
 nav{display:flex;align-items:center;gap:8px;margin-bottom:20px;font-size:.9rem;color:#64748b}
 nav a{color:#60a5fa}nav span{color:#475569}
+.search-bar-row{display:flex;gap:10px;align-items:center}
+.search-filters{display:flex;gap:8px;align-items:center;flex-shrink:0}
+@media(max-width:768px){
+  .container{padding:14px}
+  .grid-3{grid-template-columns:1fr}
+  .search-bar-row{flex-direction:column;gap:8px}
+  .search-bar-row>div:first-child{width:100%}
+  .search-filters{width:100%;justify-content:space-between}
+  .search-filters select,.search-filters button{flex:1}
+  table{font-size:.85rem}
+  th,td{padding:8px 6px}
+  .actions{flex-direction:column;gap:4px}
+  .actions .btn,.actions form{width:100%}
+  .actions .btn-sm{width:100%;text-align:center}
+  h1{font-size:1.4rem}
+}
+@media(max-width:480px){
+  .container{padding:10px}
+  .search-filters{flex-wrap:wrap}
+  .search-filters select{flex:1 1 45%}
+  .search-filters button{flex:1 1 100%}
+  .stat-card{padding:12px 10px}
+  .stat-num{font-size:1.5rem}
+  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+}
 </style>
 <script>
 function confirmAction(msg,form){if(confirm(msg)){form.submit();}return false;}
@@ -685,24 +710,26 @@ async function fetchParentId(btn) {
           <div class="stat-card"><div class="stat-num" style="color:#4ade80">${runningCount}</div><div class="stat-lbl">Running</div></div>
           <div class="stat-card"><div class="stat-num" style="color:#60a5fa">${activeCount}</div><div class="stat-lbl">Active</div></div>
         </div>
-        <div id="searchBar" style="position:sticky;top:0;z-index:100;background:#0f172a;padding:14px 0 10px;border-bottom:1px solid #1e293b;margin-bottom:16px;backdrop-filter:blur(12px)">
-          <div style="display:flex;gap:10px;align-items:center">
-            <div style="flex:1;position:relative">
-              <input type="text" id="botSearch" placeholder="Search by Bot ID, Name, Username, Support..." style="width:100%;padding:10px 14px 10px 38px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.95rem;outline:none;transition:border-color .2s,box-shadow .2s" onfocus="this.style.borderColor='#3b82f6';this.style.boxShadow='0 0 0 3px rgba(59,130,246,.15)'" onblur="this.style.borderColor='#334155';this.style.boxShadow='none'">
-              <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;fill:none;stroke:#64748b;stroke-width:2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <div id="searchBar" style="position:sticky;top:0;z-index:100;background:rgba(15,23,42,.95);padding:14px 0 10px;border-bottom:1px solid #1e293b;margin-bottom:16px;backdrop-filter:blur(12px)">
+          <div class="search-bar-row">
+            <div style="flex:1;position:relative;min-width:0">
+              <input type="text" id="botSearch" placeholder="Search by Bot ID, Name, Username, Support..." style="width:100%;padding:12px 16px 12px 42px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:10px;font-size:1rem;outline:none;margin-bottom:0;transition:border-color .2s,box-shadow .2s" onfocus="this.style.borderColor='#3b82f6';this.style.boxShadow='0 0 0 3px rgba(59,130,246,.2)'" onblur="this.style.borderColor='#334155';this.style.boxShadow='none'">
+              <svg style="position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;fill:none;stroke:#64748b;stroke-width:2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             </div>
-            <select id="filterStatus" style="padding:10px 14px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.9rem;cursor:pointer;outline:none;min-width:130px;transition:border-color .2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#334155'">
-              <option value="all">All Status</option>
-              <option value="running">Running</option>
-              <option value="stopped">Stopped</option>
-              <option value="inactive">Inactive</option>
-            </select>
-            <select id="filterBotOff" style="padding:10px 14px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.9rem;cursor:pointer;outline:none;min-width:130px;transition:border-color .2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#334155'">
-              <option value="all">Bot Off: All</option>
-              <option value="1">Bot Off: Yes</option>
-              <option value="0">Bot Off: No</option>
-            </select>
-            <button id="clearBtn" onclick="document.getElementById('botSearch').value='';document.getElementById('filterStatus').value='all';document.getElementById('filterBotOff').value='all';filterBots()" style="padding:10px 16px;background:#334155;border:1px solid #475569;color:#94a3b8;border-radius:8px;font-size:.9rem;cursor:pointer;white-space:nowrap;transition:background .2s,color .2s;display:none" onmouseover="this.style.background='#475569';this.style.color='#e2e8f0'" onmouseout="this.style.background='#334155';this.style.color='#94a3b8'">&#x2715; Clear</button>
+            <div class="search-filters">
+              <select id="filterStatus" style="padding:8px 10px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.82rem;cursor:pointer;outline:none;margin-bottom:0;transition:border-color .2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#334155'">
+                <option value="all">All Status</option>
+                <option value="running">Running</option>
+                <option value="stopped">Stopped</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <select id="filterBotOff" style="padding:8px 10px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.82rem;cursor:pointer;outline:none;margin-bottom:0;transition:border-color .2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#334155'">
+                <option value="all">Bot Off: All</option>
+                <option value="1">Bot Off: Yes</option>
+                <option value="0">Bot Off: No</option>
+              </select>
+              <button id="clearBtn" onclick="document.getElementById('botSearch').value='';document.getElementById('filterStatus').value='all';document.getElementById('filterBotOff').value='all';filterBots()" style="padding:8px 12px;background:#ef4444;border:none;color:#fff;border-radius:8px;font-size:.82rem;cursor:pointer;white-space:nowrap;transition:background .2s;display:none" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">&#x2715; Clear</button>
+            </div>
           </div>
           <div id="searchResults" style="margin-top:6px;font-size:.82rem;color:#64748b;min-height:18px"></div>
         </div>
