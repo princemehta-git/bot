@@ -658,7 +658,8 @@ async function fetchParentId(btn) {
           ? '<span class="badge badge-blue" style="font-size:.7rem">Webhook</span>'
           : '<span class="badge" style="background:#1e3a2f;color:#4ade80;font-size:.7rem">Polling</span>';
         const webhookPath = USE_WEBHOOK && isRunning ? `<br><small style="color:#475569;font-family:monospace">/webhook/${esc(b.bot_id)}</small>` : '';
-        rows += `<tr>
+        const botStatus = !b.is_active ? 'inactive' : isRunning ? 'running' : 'stopped';
+        rows += `<tr class="bot-row" data-botid="${esc(b.bot_id)}" data-name="${esc(b.bot_display_name || '')}" data-username="${esc(b.bot_username || '')}" data-support="${esc(b.support_username || '')}" data-status="${botStatus}" data-botoff="${b.bot_off ? '1' : '0'}">
           <td><strong>${esc(b.bot_display_name || b.bot_id)}</strong><br><small style="color:#64748b">${esc(b.bot_id)}</small>${webhookPath}</td>
           <td style="color:#94a3b8">${esc(b.bot_username || '—')}</td>
           <td>${statusBadge} ${botOffBadge} ${modeBadge}</td>
@@ -686,9 +687,59 @@ async function fetchParentId(btn) {
         </div>
         <div class="card">
           <h2>All Bots</h2>
+          <div style="margin-bottom:16px">
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+              <div style="flex:1;min-width:220px;position:relative">
+                <input type="text" id="botSearch" placeholder="Search by Bot ID, Name, Username, Support..." style="width:100%;padding:10px 14px 10px 36px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.95rem;outline:none;transition:border-color .2s" onfocus="this.style.borderColor='#3b82f6'" onblur="this.style.borderColor='#334155'">
+                <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:18px;height:18px;fill:none;stroke:#64748b;stroke-width:2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              </div>
+              <select id="filterStatus" style="padding:10px 14px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.9rem;cursor:pointer;outline:none">
+                <option value="all">All Status</option>
+                <option value="running">Running</option>
+                <option value="stopped">Stopped</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <select id="filterBotOff" style="padding:10px 14px;background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:8px;font-size:.9rem;cursor:pointer;outline:none">
+                <option value="all">Bot Off: All</option>
+                <option value="1">Bot Off: Yes</option>
+                <option value="0">Bot Off: No</option>
+              </select>
+              <button onclick="document.getElementById('botSearch').value='';document.getElementById('filterStatus').value='all';document.getElementById('filterBotOff').value='all';filterBots()" style="padding:10px 14px;background:#334155;border:1px solid #475569;color:#94a3b8;border-radius:8px;font-size:.9rem;cursor:pointer;white-space:nowrap">Clear Filters</button>
+            </div>
+            <div id="searchResults" style="margin-top:8px;font-size:.85rem;color:#64748b"></div>
+          </div>
           <table><thead><tr><th>Bot</th><th>Username</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="4" style="text-align:center;color:#64748b;padding:32px">No bots yet. Click "+ Add Bot" to create one.</td></tr>'}</tbody></table>
+          <tbody id="botTableBody">${rows || '<tr><td colspan="4" style="text-align:center;color:#64748b;padding:32px">No bots yet. Click "+ Add Bot" to create one.</td></tr>'}</tbody></table>
         </div>
+        <script>
+        function filterBots(){
+          var q=(document.getElementById('botSearch').value||'').toLowerCase().trim();
+          var sf=document.getElementById('filterStatus').value;
+          var bf=document.getElementById('filterBotOff').value;
+          var rows=document.querySelectorAll('.bot-row');
+          var total=rows.length,shown=0;
+          rows.forEach(function(r){
+            var match=true;
+            if(q){
+              var searchFields=[r.dataset.botid,r.dataset.name,r.dataset.username,r.dataset.support].join(' ').toLowerCase();
+              match=searchFields.indexOf(q)!==-1;
+            }
+            if(match&&sf!=='all'){match=r.dataset.status===sf}
+            if(match&&bf!=='all'){match=r.dataset.botoff===bf}
+            r.style.display=match?'':'none';
+            if(match)shown++;
+          });
+          var info=document.getElementById('searchResults');
+          if(q||sf!=='all'||bf!=='all'){
+            info.textContent='Showing '+shown+' of '+total+' bots';
+          }else{
+            info.textContent='';
+          }
+        }
+        document.getElementById('botSearch').addEventListener('input',filterBots);
+        document.getElementById('filterStatus').addEventListener('change',filterBots);
+        document.getElementById('filterBotOff').addEventListener('change',filterBots);
+        </script>
         ${modeInfo}
       </div>`));
     });
