@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
   gifts                     DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Gifts balance',
   ichancy_user_id           VARCHAR(64) NULL COMMENT 'Ichancy platform user number',
   wheel_spins_available_today INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'Wheel spins available today',
-  last_spin_grant_date      DATE NULL COMMENT 'Syria date when daily spin was last granted',
+  last_spin_grant_date      DATETIME NULL COMMENT 'Timestamp when daily spin was last granted (24h cooldown)',
   last_box_game_at          DATETIME NULL COMMENT 'Last time user played box game (one per 24h)',
   referred_by               BIGINT NULL COMMENT 'Telegram ID of user who referred this user',
   referral_net_l1           DECIMAL(18,2) NOT NULL DEFAULT 0.00 COMMENT 'Running L1 referral net balance',
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS deleted_users (
   gifts                     DECIMAL(18,2) NOT NULL DEFAULT 0.00,
   ichancy_user_id           VARCHAR(64) NULL,
   wheel_spins_available_today INT UNSIGNED DEFAULT 0,
-  last_spin_grant_date      DATE NULL,
+  last_spin_grant_date      DATETIME NULL,
   last_box_game_at          DATETIME NULL,
   deleted_at                DATETIME NOT NULL,
   PRIMARY KEY (id)
